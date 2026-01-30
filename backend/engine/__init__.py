@@ -10,6 +10,7 @@ from .execution import (
     StopExecutionModel, CompositeExecutionModel
 )
 from .metrics import calculate_metrics
+from .walk_forward import WalkForwardOptimizer
 
 __all__ = [
     "OrderSide", "OrderType", "Order", "Fill", "Position", "Trade",
@@ -17,5 +18,6 @@ __all__ = [
     "Portfolio",
     "ExecutionModel", "MarketExecutionModel", "LimitExecutionModel",
     "StopExecutionModel", "CompositeExecutionModel",
-    "calculate_metrics"
+    "calculate_metrics",
+    "WalkForwardOptimizer"
 ]
