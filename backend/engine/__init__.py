@@ -9,11 +9,13 @@ from .execution import (
     ExecutionModel, MarketExecutionModel, LimitExecutionModel,
     StopExecutionModel, CompositeExecutionModel
 )
+from .metrics import calculate_metrics
 
 __all__ = [
     "OrderSide", "OrderType", "Order", "Fill", "Position", "Trade",
     "PerformanceMetrics", "BacktestResult", "WalkForwardResult", "MonteCarloResult",
     "Portfolio",
     "ExecutionModel", "MarketExecutionModel", "LimitExecutionModel",
-    "StopExecutionModel", "CompositeExecutionModel"
+    "StopExecutionModel", "CompositeExecutionModel",
+    "calculate_metrics"
 ]
