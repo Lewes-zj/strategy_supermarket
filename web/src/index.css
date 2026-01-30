@@ -1,0 +1,100 @@
+:root {
+  /* Brand Colors */
+  --color-brand-blue: #1890FF;
+  --color-brand-blue-hover: #40a9ff;
+  --color-up-red: #F5222D;
+  --color-down-green: #52C41A;
+  --color-gold: #FADB14;
+
+  /* Backgrounds */
+  --bg-main: #141820;
+  --bg-card: #1F2430;
+  --bg-card-hover: #282c34;
+  --bg-overlay: rgba(0, 0, 0, 0.6);
+
+  /* Text */
+  --text-primary: #FFFFFF;
+  --text-secondary: #8C8C8C;
+  --text-muted: #5a5a5a;
+
+  /* Borders */
+  --border-light: #303640;
+  --border-brand: #1890FF;
+
+  /* Font Sizes */
+  --font-xs: 12px;
+  --font-sm: 14px;
+  --font-base: 16px;
+  --font-lg: 18px;
+  --font-xl: 24px;
+  --font-xxl: 32px;
+  --font-hero: 48px;
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+
+  /* Animation */
+  --transition-fast: 0.2s ease;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  min-height: 100vh;
+}
+
+/* Utilities */
+.text-red { color: var(--color-up-red); }
+.text-green { color: var(--color-down-green); }
+.text-blue { color: var(--color-brand-blue); }
+.text-gray { color: var(--text-secondary); }
+.font-bold { font-weight: 700; }
+.text-center { text-align: center; }
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+  font-weight: 600;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-main);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-light);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Layout Containers */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 var(--spacing-md);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes pulse-red {
+  0% { box-shadow: 0 0 0 0 rgba(245, 34, 45, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(245, 34, 45, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 34, 45, 0); }
+}
+

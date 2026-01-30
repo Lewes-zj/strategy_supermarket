@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Alpha Trend Strategy - Terminal View</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&amp;family=Noto+Sans:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#135bec",
+                        "primary-hover": "#0e4bca",
+                        "background-dark": "#0F1218",
+                        "background-card": "#1A1F29", 
+                        "background-elevated": "#232936",
+                        "text-main": "#FFFFFF",
+                        "text-secondary": "#9da6b9",
+                        "stock-up": "#ef4444", 
+                        "stock-down": "#10b981", 
+                        "chart-blue": "#3b82f6",
+                        "chart-orange": "#f97316",
+                        "chart-red": "#ef4444",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "mono": ["ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", "monospace"]
+                    },
+                    boxShadow: {
+                        'glow': '0 0 20px rgba(19, 91, 236, 0.15)',
+                        'card': '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                    }
+                },
+            },
+        }
+    </script>
+<style type="text/tailwindcss">
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0F1218; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #232936; 
+            border-radius: 4px;
+        }
+        .glass-panel {
+            background: rgba(26, 31, 41, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .pulsing-dot {
+            width: 8px;
+            height: 8px;
+            background-color: #10b981;
+            border-radius: 50%;
+            position: relative;
+        }
+        .pulsing-dot::after {
+            content: '';
+            position: absolute;
+            top: -4px;
+            left: -4px;
+            right: -4px;
+            bottom: -4px;
+            border-radius: 50%;
+            background-color: rgba(16, 185, 129, 0.4);
+            animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+        }
+        @keyframes pulse-ring {
+            0% { transform: scale(0.5); opacity: 0; }
+            50% { opacity: 1; }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+        .sidebar-tab.active {
+            @apply bg-primary/10 text-primary border-r-2 border-primary;
+        }
+        .content-tab.active {
+            @apply border-b-2 border-primary text-white;
+        }
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+            opacity: 0.5;
+            cursor: pointer;
+        }
+        input[type="checkbox"] {
+            @apply rounded border-white/20 bg-background-elevated text-primary focus:ring-0 focus:ring-offset-0 cursor-pointer;
+        }.daily-table th {
+            @apply px-4 py-3 text-xs font-bold text-text-secondary uppercase tracking-wider bg-background-elevated/50 border-b border-white/10;
+        }
+        .daily-table td {
+            @apply px-4 py-3 text-sm font-medium border-b border-white/5;
+        }
+        .daily-group-header {
+            @apply bg-background-elevated/30 text-xs font-bold text-white uppercase tracking-wider border-b border-white/5;
+        }
+        .daily-summary-row {
+            @apply bg-background-elevated/10 font-bold border-b border-white/10;
+        }
+    </style>
+</head>
+<body class="bg-background-dark font-display text-text-main antialiased selection:bg-primary selection:text-white">
+<header class="w-full border-b border-white/5 bg-background-dark relative z-20">
+<div class="flex h-10 w-full items-center justify-between border-b border-white/5 px-6 bg-background-card/30 backdrop-blur-sm">
+<div class="flex items-center gap-2 text-xs text-text-secondary font-medium">
+<span class="hover:text-white transition-colors cursor-pointer">策略广场</span>
+<span class="text-white/20">&gt;</span>
+<span class="text-white">Alpha Trend Strategy</span>
+</div>
+<nav class="hidden md:flex items-center gap-6">
+<a class="text-xs font-medium text-text-secondary hover:text-white transition-colors" href="#">Market</a>
+<a class="text-xs font-medium text-text-secondary hover:text-white transition-colors" href="#">Strategies</a>
+<a class="text-xs font-medium text-text-secondary hover:text-white transition-colors" href="#">Portfolio</a>
+<div class="h-3 w-px bg-white/10"></div>
+<div class="flex items-center gap-3">
+<button class="text-text-secondary hover:text-white"><span class="material-symbols-outlined text-base">notifications</span></button>
+<div class="h-5 w-5 rounded-full bg-cover bg-center ring-1 ring-white/10" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCl7lNEUaQcO8O72nSwYVPXwgv4IaXRMNfPEMhwkSDgO_syLLp1oF5_W_tROK7OTPD0rCRlLslMlmPO7BSsPf9nue22klTz1WkZ9VdKfIIVe6Y-L0yLYuaBRiqAHRKYYJGFClwveggBAak4b2QACl5FBB2hgzq2tTR_ruZ6Z-2MTHUofaAz8Dc8Yo3gnyzLx9V2D40cREJww4VJp0DzyUBg9dia2bePda7phIWru0-j09gQHVlXgGTNSdHZI1aMs4o57Y6syfZvS74');"></div>
+</div>
+</nav>
+</div>
+<div class="flex flex-col lg:flex-row items-stretch lg:items-center justify-between px-8 py-8 gap-8">
+<div class="flex flex-col gap-4 min-w-[260px]">
+<div>
+<h1 class="text-3xl font-bold text-white tracking-tight leading-tight">Alpha Trend Strategy</h1>
+<p class="text-sm font-medium text-text-secondary mt-1">中小盘轮动趋势增强版</p>
+</div>
+<div class="flex items-center gap-3">
+<div class="flex items-center gap-2 bg-[#10b981]/10 px-2.5 py-1 rounded border border-[#10b981]/20">
+<div class="pulsing-dot"></div>
+<span class="text-xs font-bold text-[#10b981]">实盘运行中</span>
+</div>
+</div>
+<div class="flex flex-wrap gap-2 pt-1">
+<span class="text-[10px] text-text-secondary bg-white/5 px-2 py-0.5 rounded border border-white/5 font-mono tracking-wide uppercase">[趋势型]</span>
+<span class="text-[10px] text-text-secondary bg-white/5 px-2 py-0.5 rounded border border-white/5 font-mono tracking-wide uppercase">[中频]</span>
+<span class="text-[10px] text-text-secondary bg-white/5 px-2 py-0.5 rounded border border-white/5 font-mono tracking-wide uppercase">[BTC/A股]</span>
+</div>
+</div>
+<div class="flex flex-1 flex-col sm:flex-row items-start sm:items-center gap-8 lg:gap-16 border-t sm:border-t-0 sm:border-l border-white/5 pt-6 sm:pt-0 sm:pl-10 lg:pl-16">
+<div class="flex flex-col">
+<span class="text-xs font-bold text-text-secondary uppercase tracking-wider mb-1">年化收益 (CAGR)</span>
+<div class="text-5xl lg:text-6xl font-black text-stock-up font-mono tracking-tighter leading-none">+43.51%</div>
+<div class="flex items-center gap-1 mt-2">
+<span class="text-xs font-medium text-stock-up/80 font-mono">近1年收益: +28.4%</span>
+</div>
+</div>
+<div class="flex flex-col gap-6">
+<div class="flex gap-10">
+<div class="flex flex-col">
+<span class="text-xs font-bold text-text-secondary uppercase tracking-wider mb-1">胜率 (Win Rate)</span>
+<span class="text-3xl font-bold text-white font-mono">67.2%</span>
+</div>
+<div class="flex flex-col">
+<span class="text-xs font-bold text-text-secondary uppercase tracking-wider mb-1">最大回撤</span>
+<span class="text-3xl font-bold text-stock-down font-mono">-18.94%</span>
+</div>
+</div>
+<div class="flex items-center gap-4 text-xs font-medium text-text-secondary/60 font-mono">
+<span>平均持仓: 17.8天</span>
+<span class="h-3 w-px bg-white/10"></span>
+<span>频率: 2次/周</span>
+</div>
+</div>
+</div>
+<div class="flex flex-col justify-center sm:pl-8">
+</div>
+</div>
+</header>
+<div class="flex w-full">
+<aside class="w-72 flex-shrink-0 border-r border-white/5 bg-background-dark pt-6 hidden md:flex md:flex-col">
+<div class="px-6 mb-6 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-sm">history</span>
+<span class="text-[10px] font-bold text-text-secondary uppercase tracking-[0.2em]">历史周期选择</span>
+</div>
+<nav class="flex flex-col w-full">
+<div class="px-6 mb-8">
+<button class="relative w-full text-left p-5 bg-[#1A1F29] border-l-[3px] border-primary shadow-card hover:bg-[#232936] transition-all group rounded-r-sm">
+<div class="flex justify-between items-start mb-2">
+<span class="text-xs font-bold text-white group-hover:text-primary transition-colors">总 (2015-至今)</span>
+</div>
+<div class="text-3xl font-black text-stock-up font-mono tracking-tighter leading-none mb-1">+1,284.5%</div>
+<span class="text-[10px] font-medium text-text-secondary/60 uppercase tracking-wider group-hover:text-text-secondary transition-colors">Cumulative Return</span>
+</button>
+</div>
+<div class="flex flex-col w-full">
+<div class="px-6 mb-2 flex items-center justify-between text-[10px] font-bold text-text-secondary/40 uppercase tracking-wider">
+<span>Period</span>
+<span class="w-24 text-right">Return</span>
+</div>
+<button class="group relative flex w-full items-center justify-between px-6 py-3 border-l-[3px] border-transparent hover:bg-white/5 transition-all">
+<div class="absolute inset-y-0 right-0 bg-gradient-to-l from-stock-up/15 to-transparent transition-all origin-right duration-500 group-hover:from-stock-up/25 z-0" style="width: 15%;"></div>
+<div class="relative z-10 flex items-center gap-2">
+<span class="text-sm font-medium text-text-secondary group-hover:text-white transition-colors">2025</span>
+<div class="flex items-center gap-1.5 bg-[#10b981]/10 px-2 py-0.5 rounded-full border border-[#10b981]/20">
+<span class="relative flex h-1.5 w-1.5">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#10b981] opacity-75"></span>
+<span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#10b981]"></span>
+</span>
+<span class="text-[9px] font-bold text-[#10b981] tracking-widest">RUNNING</span>
+</div>
+</div>
+<span class="relative z-10 w-24 text-right text-sm font-bold text-stock-up font-mono group-hover:scale-105 transition-transform">+12.4%</span>
+</button>
+<div class="h-px bg-white/5 mx-6 w-auto"></div>
+<button class="group relative flex w-full items-center justify-between px-6 py-3 border-l-[3px] border-transparent hover:bg-white/5 transition-all">
+<div class="absolute inset-y-0 right-0 bg-gradient-to-l from-stock-up/15 to-transparent transition-all origin-right duration-500 group-hover:from-stock-up/25 z-0" style="width: 40%;"></div>
+<span class="relative z-10 text-sm font-medium text-text-secondary group-hover:text-white transition-colors">2024</span>
+<span class="relative z-10 w-24 text-right text-sm font-bold text-stock-up font-mono group-hover:scale-105 transition-transform">+45.2%</span>
+</button>
+<div class="h-px bg-white/5 mx-6 w-auto"></div>
+<button class="group relative flex w-full items-center justify-between px-6 py-3 border-l-[3px] border-transparent hover:bg-white/5 transition-all">
+<div class="absolute inset-y-0 right-0 bg-gradient-to-l from-stock-down/15 to-transparent transition-all origin-right duration-500 group-hover:from-stock-down/25 z-0" style="width: 12%;"></div>
+<span class="relative z-10 text-sm font-medium text-text-secondary group-hover:text-white transition-colors">2023</span>
+<span class="relative z-10 w-24 text-right text-sm font-bold text-stock-down font-mono group-hover:scale-105 transition-transform">-12.1%</span>
+</button>
+<div class="h-px bg-white/5 mx-6 w-auto"></div>
+<button class="group relative flex w-full items-center justify-between px-6 py-3 border-l-[3px] border-transparent hover:bg-white/5 transition-all">
+<div class="absolute inset-y-0 right-0 bg-gradient-to-l from-stock-up/15 to-transparent transition-all origin-right duration-500 group-hover:from-stock-up/25 z-0" style="width: 8%;"></div>
+<span class="relative z-10 text-sm font-medium text-text-secondary group-hover:text-white transition-colors">2022</span>
+<span class="relative z-10 w-24 text-right text-sm font-bold text-stock-up font-mono group-hover:scale-105 transition-transform">+8.5%</span>
+</button>
+<div class="h-px bg-white/5 mx-6 w-auto"></div>
+<button class="group relative flex w-full items-center justify-between px-6 py-3 border-l-[3px] border-transparent hover:bg-white/5 transition-all">
+<div class="absolute inset-y-0 right-0 bg-gradient-to-l from-stock-up/15 to-transparent transition-all origin-right duration-500 group-hover:from-stock-up/25 z-0" style="width: 90%;"></div>
+<span class="relative z-10 text-sm font-medium text-text-secondary group-hover:text-white transition-colors">2021</span>
+<span class="relative z-10 w-24 text-right text-sm font-bold text-stock-up font-mono group-hover:scale-105 transition-transform">+112.3%</span>
+</button>
+</div>
+</nav>
+</aside>
+<main class="flex-grow bg-[#0c0e12]">
+<div class="sticky top-0 z-10 flex w-full border-b border-white/5 bg-[#0c0e12]/95 backdrop-blur-sm px-8">
+<button class="content-tab px-8 py-5 text-sm font-medium text-text-secondary hover:text-white transition-all">数据指标</button>
+<button class="content-tab px-8 py-5 text-sm font-medium text-text-secondary hover:text-white transition-all">交易记录</button>
+<button class="content-tab active px-8 py-5 text-sm font-bold text-white transition-all">每日持仓&amp;收益</button>
+</div>
+<div class="p-8 max-w-[1400px]">
+<div id="daily-positions-view">
+<div class="w-full relative">
+<div class="w-full overflow-hidden rounded-xl border border-white/5 bg-background-card shadow-sm relative z-0 min-h-[500px]">
+<table class="w-full text-left border-collapse daily-table">
+<thead>
+<tr>
+<th class="w-1/4">代码/名称</th>
+<th class="w-1/6">行业板块</th>
+<th class="w-1/12 text-center">方向</th>
+<th class="w-1/12 text-right">持仓天数</th>
+<th class="w-1/6 text-right">仓位占比</th>
+<th class="w-1/6 text-right">累计浮盈</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-white/5 text-sm font-medium">
+<tr class="group hover:bg-white/[0.02] transition-colors">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-amber-400 text-lg">lock</span>
+<div class="relative overflow-hidden rounded bg-white/5 px-2 py-0.5 select-none">
+<span class="blur-[6px] text-white/60">600519.SH 贵州茅台</span>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 text-text-secondary">消费电子</td>
+<td class="px-6 py-4 text-center"><span class="text-stock-up bg-stock-up/10 px-2 py-0.5 rounded text-xs font-bold">做多</span></td>
+<td class="px-6 py-4 text-right font-mono text-white">12天</td>
+<td class="px-6 py-4 text-right font-mono text-white">25%</td>
+<td class="px-6 py-4 text-right font-mono font-bold text-stock-up text-lg">+14.5%</td>
+</tr>
+<tr class="group hover:bg-white/[0.02] transition-colors">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-amber-400 text-lg">lock</span>
+<div class="relative overflow-hidden rounded bg-white/5 px-2 py-0.5 select-none">
+<span class="blur-[6px] text-white/60">002594.SZ 比亚迪车</span>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 text-text-secondary">光伏设备</td>
+<td class="px-6 py-4 text-center"><span class="text-stock-up bg-stock-up/10 px-2 py-0.5 rounded text-xs font-bold">做多</span></td>
+<td class="px-6 py-4 text-right font-mono text-white">3天</td>
+<td class="px-6 py-4 text-right font-mono text-white">15%</td>
+<td class="px-6 py-4 text-right font-mono font-bold text-stock-up text-lg">+5.2%</td>
+</tr>
+<tr class="group opacity-50">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-text-secondary/30 text-lg">lock</span>
+<div class="relative overflow-hidden rounded bg-white/5 px-2 py-0.5 select-none">
+<span class="blur-[6px] text-white/60">600276.SH 恒瑞医药</span>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 text-text-secondary">中药生产</td>
+<td class="px-6 py-4 text-center"><span class="text-stock-up bg-stock-up/10 px-2 py-0.5 rounded text-xs font-bold">做多</span></td>
+<td class="px-6 py-4 text-right font-mono text-white">1天</td>
+<td class="px-6 py-4 text-right font-mono text-white">10%</td>
+<td class="px-6 py-4 text-right font-mono font-bold text-stock-down text-lg">-0.8%</td>
+</tr>
+<tr class="group opacity-20">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-text-secondary/30 text-lg">lock</span>
+<div class="relative overflow-hidden rounded bg-white/5 px-2 py-0.5 select-none">
+<span class="blur-[6px] text-white/60">000625.SZ 长安汽车</span>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 text-text-secondary">汽车零部件</td>
+<td class="px-6 py-4 text-center"><span class="text-stock-up bg-stock-up/10 px-2 py-0.5 rounded text-xs font-bold">做多</span></td>
+<td class="px-6 py-4 text-right font-mono text-white">5天</td>
+<td class="px-6 py-4 text-right font-mono text-white">20%</td>
+<td class="px-6 py-4 text-right font-mono font-bold text-stock-up text-lg">+3.4%</td>
+</tr>
+<tr class="group opacity-0">
+<td class="px-6 py-12" colspan="6"> </td>
+</tr>
+</tbody>
+</table>
+<div class="absolute inset-x-0 bottom-0 top-[140px] z-10 pointer-events-none">
+<div class="absolute inset-0 bg-gradient-to-b from-transparent via-[#0F1218]/90 to-[#0F1218]"></div>
+<div class="absolute inset-0 flex flex-col items-center justify-center pt-10 text-center pointer-events-auto">
+<div class="text-6xl font-black text-stock-up font-mono tracking-tighter drop-shadow-2xl mb-2 animate-pulse">+22.3%</div>
+<h3 class="text-xl font-bold text-white mb-8 tracking-wide">当前持仓 4 只，策略实盘运行中</h3>
+<div class="w-full max-w-sm px-4">
+<button class="w-full py-4 bg-primary hover:bg-primary-hover text-white text-lg font-bold rounded-lg shadow-[0_0_30px_rgba(19,91,236,0.3)] transition-all flex items-center justify-center gap-2 mb-4 group relative overflow-hidden transform hover:-translate-y-0.5">
+<div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
+<span class="material-symbols-outlined text-2xl group-hover:rotate-12 transition-transform">lock_open</span>
+<span class="relative">立即解锁</span>
+</button>
+<div class="flex items-center justify-center gap-2 text-xs font-medium text-text-secondary/70">
+<span class="material-symbols-outlined text-sm text-text-secondary">verified_user</span>
+                                        🛡️ 7天无理由退款
+                                    </div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="hidden" id="trade-history-view">
+<div class="mb-6 p-4 bg-background-card/50 border border-white/5 rounded-lg">
+<div class="flex flex-wrap items-center gap-x-6 gap-y-3">
+<label class="flex items-center gap-2 text-xs text-text-secondary hover:text-white cursor-pointer select-none">
+<input class="w-3.5 h-3.5" type="checkbox"/>
+<span>品种</span>
+</label>
+<label class="flex items-center gap-2 text-xs text-text-secondary hover:text-white cursor-pointer select-none">
+<input checked="" class="w-3.5 h-3.5" type="checkbox"/>
+<span>交易类型</span>
+</label>
+<label class="flex items-center gap-2 text-xs text-text-secondary hover:text-white cursor-pointer select-none">
+<input checked="" class="w-3.5 h-3.5" type="checkbox"/>
+<span>下单类型</span>
+</label>
+<label class="flex items-center gap-2 text-xs text-text-secondary hover:text-white cursor-pointer select-none">
+<input checked="" class="w-3.5 h-3.5" type="checkbox"/>
+<span>成交数量</span>
+</label>
+<label class="flex items-center gap-2 text-xs text-text-secondary hover:text-white cursor-pointer select-none">
+<input checked="" class="w-3.5 h-3.5" type="checkbox"/>
+<span>成交价</span>
+</label>
+<label class="flex items-center gap-2 text-xs text-text-secondary hover:text-white cursor-pointer select-none">
+<input checked="" class="w-3.5 h-3.5" type="checkbox"/>
+<span>成交额</span>
+</label>
+<label class="flex items-center gap-2 text-xs text-text-secondary hover:text-white cursor-pointer select-none">
+<input class="w-3.5 h-3.5" type="checkbox"/>
+<span>委托数量</span>
+</label>
+<label class="flex items-center gap-2 text-xs text-text-secondary hover:text-white cursor-pointer select-none">
+<input class="w-3.5 h-3.5" type="checkbox"/>
+<span>委托价格</span>
+</label>
+<label class="flex items-center gap-2 text-xs text-text-secondary hover:text-white cursor-pointer select-none">
+<input class="w-3.5 h-3.5" type="checkbox"/>
+<span>状态</span>
+</label>
+<label class="flex items-center gap-2 text-xs text-text-secondary hover:text-white cursor-pointer select-none">
+<input checked="" class="w-3.5 h-3.5" type="checkbox"/>
+<span>平仓盈亏</span>
+</label>
+<label class="flex items-center gap-2 text-xs text-text-secondary hover:text-white cursor-pointer select-none">
+<input checked="" class="w-3.5 h-3.5" type="checkbox"/>
+<span>手续费</span>
+</label>
+<label class="flex items-center gap-2 text-xs text-text-secondary hover:text-white cursor-pointer select-none">
+<input class="w-3.5 h-3.5" type="checkbox"/>
+<span>最后更新时间</span>
+</label>
+</div>
+</div>
+<div class="w-full overflow-hidden rounded-xl border border-white/5 bg-background-card shadow-sm">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-background-elevated/80 border-b border-white/10 text-xs font-bold text-text-secondary uppercase tracking-wider">
+<th class="px-6 py-4 whitespace-nowrap">日期</th>
+<th class="px-6 py-4 whitespace-nowrap">委托时间</th>
+<th class="px-6 py-4 whitespace-nowrap">标的</th>
+<th class="px-6 py-4 whitespace-nowrap text-center">交易类型</th>
+<th class="px-6 py-4 whitespace-nowrap text-center">下单类型</th>
+<th class="px-6 py-4 whitespace-nowrap text-right">成交数量</th>
+<th class="px-6 py-4 whitespace-nowrap text-right">成交价</th>
+<th class="px-6 py-4 whitespace-nowrap text-right">成交额</th>
+<th class="px-6 py-4 whitespace-nowrap text-right">平仓盈亏</th>
+<th class="px-6 py-4 whitespace-nowrap text-right">手续费</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-white/5 text-sm font-medium">
+<tr class="hover:bg-white/[0.05] transition-colors even:bg-white/[0.02] odd:bg-transparent">
+<td class="px-6 py-4 whitespace-nowrap text-text-secondary">2025-01-22</td>
+<td class="px-6 py-4 whitespace-nowrap text-text-secondary font-mono">09:31:00</td>
+<td class="px-6 py-4 whitespace-nowrap text-white">大洋生物 (003017.XSHE)</td>
+<td class="px-6 py-4 whitespace-nowrap text-center"><span class="text-stock-down font-bold">卖</span></td>
+<td class="px-6 py-4 whitespace-nowrap text-center text-text-secondary">市价单</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">-1000股</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">19.6</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">-19,600.00</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-stock-up font-bold">1,030.00</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-text-secondary">24.60</td>
+</tr>
+<tr class="hover:bg-white/[0.05] transition-colors even:bg-white/[0.02] odd:bg-transparent">
+<td class="px-6 py-4 whitespace-nowrap text-text-secondary">2025-01-15</td>
+<td class="px-6 py-4 whitespace-nowrap text-text-secondary font-mono">09:31:00</td>
+<td class="px-6 py-4 whitespace-nowrap text-white">国统股份 (002205.XSHE)</td>
+<td class="px-6 py-4 whitespace-nowrap text-center"><span class="text-stock-up font-bold">买</span></td>
+<td class="px-6 py-4 whitespace-nowrap text-center text-text-secondary">市价单</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">3500股</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">8.29</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">29,015.00</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-text-secondary">0.00</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-text-secondary">7.25</td>
+</tr>
+<tr class="hover:bg-white/[0.05] transition-colors even:bg-white/[0.02] odd:bg-transparent">
+<td class="px-6 py-4 whitespace-nowrap text-text-secondary">2025-01-15</td>
+<td class="px-6 py-4 whitespace-nowrap text-text-secondary font-mono">09:31:00</td>
+<td class="px-6 py-4 whitespace-nowrap text-white">天顺股份 (002800.XSHE)</td>
+<td class="px-6 py-4 whitespace-nowrap text-center"><span class="text-stock-up font-bold">买</span></td>
+<td class="px-6 py-4 whitespace-nowrap text-center text-text-secondary">市价单</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">3000股</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">9.63</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">28,890.00</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-text-secondary">0.00</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-text-secondary">7.22</td>
+</tr>
+<tr class="hover:bg-white/[0.05] transition-colors even:bg-white/[0.02] odd:bg-transparent">
+<td class="px-6 py-4 whitespace-nowrap text-text-secondary">2025-01-15</td>
+<td class="px-6 py-4 whitespace-nowrap text-text-secondary font-mono">09:31:00</td>
+<td class="px-6 py-4 whitespace-nowrap text-white">名雕股份 (002830.XSHE)</td>
+<td class="px-6 py-4 whitespace-nowrap text-center"><span class="text-stock-down font-bold">卖</span></td>
+<td class="px-6 py-4 whitespace-nowrap text-center text-text-secondary">市价单</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">-1900股</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">12.47</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">-23,693.00</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-stock-up font-bold">1,178.00</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-text-secondary">29.62</td>
+</tr>
+<tr class="hover:bg-white/[0.05] transition-colors even:bg-white/[0.02] odd:bg-transparent">
+<td class="px-6 py-4 whitespace-nowrap text-text-secondary">2025-01-13</td>
+<td class="px-6 py-4 whitespace-nowrap text-text-secondary font-mono">10:00:00</td>
+<td class="px-6 py-4 whitespace-nowrap text-white">国统股份 (002205.XSHE)</td>
+<td class="px-6 py-4 whitespace-nowrap text-center"><span class="text-stock-down font-bold">卖</span></td>
+<td class="px-6 py-4 whitespace-nowrap text-center text-text-secondary">市价单</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">-2300股</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">7.7</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">-17,710.00</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-stock-down font-bold">-1,863.00</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-text-secondary">22.71</td>
+</tr>
+<tr class="hover:bg-white/[0.05] transition-colors even:bg-white/[0.02] odd:bg-transparent">
+<td class="px-6 py-4 whitespace-nowrap text-text-secondary">2025-01-13</td>
+<td class="px-6 py-4 whitespace-nowrap text-text-secondary font-mono">10:00:00</td>
+<td class="px-6 py-4 whitespace-nowrap text-white">天顺股份 (002800.XSHE)</td>
+<td class="px-6 py-4 whitespace-nowrap text-center"><span class="text-stock-down font-bold">卖</span></td>
+<td class="px-6 py-4 whitespace-nowrap text-center text-text-secondary">市价单</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">-1900股</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">9.06</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">-17,214.00</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-stock-down font-bold">-2,071.00</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-text-secondary">22.21</td>
+</tr>
+<tr class="hover:bg-white/[0.05] transition-colors even:bg-white/[0.02] odd:bg-transparent">
+<td class="px-6 py-4 whitespace-nowrap text-text-secondary">2025-01-08</td>
+<td class="px-6 py-4 whitespace-nowrap text-text-secondary font-mono">09:31:00</td>
+<td class="px-6 py-4 whitespace-nowrap text-white">名雕股份 (002830.XSHE)</td>
+<td class="px-6 py-4 whitespace-nowrap text-center"><span class="text-stock-up font-bold">买</span></td>
+<td class="px-6 py-4 whitespace-nowrap text-center text-text-secondary">市价单</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">1900股</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">11.85</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">22,515.00</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-text-secondary">0.00</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-text-secondary">5.63</td>
+</tr>
+<tr class="hover:bg-white/[0.05] transition-colors even:bg-white/[0.02] odd:bg-transparent">
+<td class="px-6 py-4 whitespace-nowrap text-text-secondary">2025-01-08</td>
+<td class="px-6 py-4 whitespace-nowrap text-text-secondary font-mono">09:31:00</td>
+<td class="px-6 py-4 whitespace-nowrap text-white">精艺股份 (002295.XSHE)</td>
+<td class="px-6 py-4 whitespace-nowrap text-center"><span class="text-stock-down font-bold">卖</span></td>
+<td class="px-6 py-4 whitespace-nowrap text-center text-text-secondary">市价单</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">-3100股</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">6.5</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">-20,150.00</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-stock-up font-bold">186.00</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-text-secondary">25.19</td>
+</tr>
+<tr class="hover:bg-white/[0.05] transition-colors even:bg-white/[0.02] odd:bg-transparent">
+<td class="px-6 py-4 whitespace-nowrap text-text-secondary">2025-01-03</td>
+<td class="px-6 py-4 whitespace-nowrap text-text-secondary font-mono">09:31:00</td>
+<td class="px-6 py-4 whitespace-nowrap text-white">精艺股份 (002295.XSHE)</td>
+<td class="px-6 py-4 whitespace-nowrap text-center"><span class="text-stock-up font-bold">买</span></td>
+<td class="px-6 py-4 whitespace-nowrap text-center text-text-secondary">市价单</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">3100股</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">6.44</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">19,964.00</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-text-secondary">0.00</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-text-secondary">5.00</td>
+</tr>
+<tr class="hover:bg-white/[0.05] transition-colors even:bg-white/[0.02] odd:bg-transparent">
+<td class="px-6 py-4 whitespace-nowrap text-text-secondary">2025-01-03</td>
+<td class="px-6 py-4 whitespace-nowrap text-text-secondary font-mono">09:31:00</td>
+<td class="px-6 py-4 whitespace-nowrap text-white">国统股份 (002205.XSHE)</td>
+<td class="px-6 py-4 whitespace-nowrap text-center"><span class="text-stock-up font-bold">买</span></td>
+<td class="px-6 py-4 whitespace-nowrap text-center text-text-secondary">市价单</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">2300股</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">8.51</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">19,573.00</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-text-secondary">0.00</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-text-secondary">5.00</td>
+</tr>
+<tr class="hover:bg-white/[0.05] transition-colors even:bg-white/[0.02] odd:bg-transparent">
+<td class="px-6 py-4 whitespace-nowrap text-text-secondary">2025-01-03</td>
+<td class="px-6 py-4 whitespace-nowrap text-text-secondary font-mono">09:31:00</td>
+<td class="px-6 py-4 whitespace-nowrap text-white">大洋生物 (003017.XSHE)</td>
+<td class="px-6 py-4 whitespace-nowrap text-center"><span class="text-stock-up font-bold">买</span></td>
+<td class="px-6 py-4 whitespace-nowrap text-center text-text-secondary">市价单</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">1000股</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">18.57</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">18,570.00</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-text-secondary">0.00</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-text-secondary">5.00</td>
+</tr>
+<tr class="hover:bg-white/[0.05] transition-colors even:bg-white/[0.02] odd:bg-transparent">
+<td class="px-6 py-4 whitespace-nowrap text-text-secondary">2025-01-03</td>
+<td class="px-6 py-4 whitespace-nowrap text-text-secondary font-mono">09:31:00</td>
+<td class="px-6 py-4 whitespace-nowrap text-white">天顺股份 (002800.XSHE)</td>
+<td class="px-6 py-4 whitespace-nowrap text-center"><span class="text-stock-up font-bold">买</span></td>
+<td class="px-6 py-4 whitespace-nowrap text-center text-text-secondary">市价单</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">1900股</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">10.15</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">19,285.00</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-text-secondary">0.00</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-text-secondary">5.00</td>
+</tr>
+<tr class="hover:bg-white/[0.05] transition-colors even:bg-white/[0.02] odd:bg-transparent">
+<td class="px-6 py-4 whitespace-nowrap text-text-secondary">2025-01-03</td>
+<td class="px-6 py-4 whitespace-nowrap text-text-secondary font-mono">09:31:00</td>
+<td class="px-6 py-4 whitespace-nowrap text-white">恒大高新 (002591.XSHE)</td>
+<td class="px-6 py-4 whitespace-nowrap text-center"><span class="text-stock-up font-bold">买</span></td>
+<td class="px-6 py-4 whitespace-nowrap text-center text-text-secondary">市价单</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">4000股</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">4.9</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-white">19,600.00</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-text-secondary">0.00</td>
+<td class="px-6 py-4 whitespace-nowrap text-right font-mono text-text-secondary">5.00</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</main></div>
+</body></html>

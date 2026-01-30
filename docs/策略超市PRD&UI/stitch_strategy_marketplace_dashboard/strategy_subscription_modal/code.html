@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Subscription Modal</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#135bec",
+                        "primary-hover": "#1d6efd",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#0f1117",
+                        "surface-dark": "#1c1f27",
+                        "border-dark": "#3b4354",
+                        "accent-gold": "#d4af37",
+                        "text-dim": "#9da6b9",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "sans": ["Inter", "sans-serif"],
+                    },
+                    boxShadow: {
+                        'glow': '0 0 20px rgba(19, 91, 236, 0.15)',
+                        'modal': '0 25px 50px -12px rgba(0, 0, 0, 0.8)',
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-black/50 backdrop-blur-sm min-h-screen flex items-center justify-center p-4">
+<!-- Modal Container -->
+<div class="relative w-full max-w-[1100px] bg-[#111318] rounded-xl shadow-modal border border-[#2a303c] overflow-hidden flex flex-col max-h-[95vh] overflow-y-auto">
+<!-- Close Button -->
+<button class="absolute top-4 right-4 text-text-dim hover:text-white transition-colors z-10">
+<span class="material-symbols-outlined text-2xl">close</span>
+</button>
+<!-- Header Section -->
+<div class="flex flex-col items-center pt-10 pb-6 px-6 text-center">
+<h1 class="text-white text-2xl md:text-3xl font-bold tracking-tight mb-3">解锁 Alpha Trend Strategy 核心权益</h1>
+<div class="inline-flex items-center gap-2 bg-[#2a1d1d] border border-[#552525] px-4 py-1.5 rounded-full animate-pulse">
+<span class="material-symbols-outlined text-red-400 text-lg">timer</span>
+<p class="text-red-200 text-sm font-medium">距下一笔交易信号触发可能不到 2 小时</p>
+</div>
+</div>
+<!-- Pricing Cards Section -->
+<div class="px-6 md:px-10 pb-8">
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+<!-- Free Card -->
+<div class="flex flex-col h-full rounded-xl border border-border-dark bg-surface-dark p-6 transition-transform hover:-translate-y-1 duration-300">
+<div class="mb-5">
+<h2 class="text-white text-lg font-bold mb-1">游客 (Free)</h2>
+<p class="text-text-dim text-sm mb-4">适合观望考察</p>
+<div class="flex items-baseline gap-1 text-white">
+<span class="text-3xl font-black">¥ 0</span>
+<span class="text-sm font-medium text-text-dim">/ 永久</span>
+</div>
+</div>
+<button class="w-full h-11 flex items-center justify-center rounded-lg bg-[#282e39] text-text-dim text-sm font-bold cursor-not-allowed mb-6 border border-transparent" disabled="">
+                        当前状态
+                    </button>
+<div class="flex flex-col gap-3 flex-1">
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-green-500 text-[20px]">check_circle</span>
+<span class="text-sm text-gray-300">查看历史净值</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-green-500 text-[20px]">check_circle</span>
+<span class="text-sm text-gray-300">验证已清仓记录</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-green-500 text-[20px]">check_circle</span>
+<span class="text-sm text-gray-300">策略指标分析</span>
+</div>
+<div class="flex items-start gap-3 opacity-50">
+<span class="material-symbols-outlined text-red-500 text-[20px]">cancel</span>
+<span class="text-sm text-gray-400">当前持仓加密</span>
+</div>
+<div class="flex items-start gap-3 opacity-50">
+<span class="material-symbols-outlined text-red-500 text-[20px]">cancel</span>
+<span class="text-sm text-gray-400">无信号通知</span>
+</div>
+</div>
+</div>
+<!-- Recommended Card (Plus) -->
+<div class="relative flex flex-col h-full rounded-xl border-2 border-primary bg-[#151921] p-6 shadow-glow transform lg:scale-105 z-10">
+<div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg uppercase tracking-wider">
+                        Recommended
+                    </div>
+<div class="mb-5 mt-1">
+<div class="flex items-center gap-2 mb-1">
+<h2 class="text-white text-lg font-bold">本策略订阅 (Plus)</h2>
+<span class="material-symbols-outlined text-orange-500 text-xl">local_fire_department</span>
+</div>
+<p class="text-primary-hover text-sm mb-4 font-medium">适合实盘跟随</p>
+<div class="flex items-baseline gap-1 text-white">
+<span class="text-4xl font-black">¥ 299</span>
+<span class="text-base font-bold text-gray-400">/ 月</span>
+</div>
+</div>
+<button class="w-full h-11 flex items-center justify-center rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-bold mb-3 shadow-lg transition-colors">
+                        立即订阅
+                    </button>
+<p class="text-xs text-center text-text-dim mb-6">支持 7 天无理由退款</p>
+<div class="flex flex-col gap-3 flex-1">
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary text-[20px]">check_circle</span>
+<span class="text-sm text-white font-medium">包含免费版所有功能</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-green-400 text-[20px]">lock_open</span>
+<span class="text-sm text-gray-200">解锁实时持仓代码</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-yellow-400 text-[20px]">bolt</span>
+<span class="text-sm text-gray-200">实时买卖信号推送</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-purple-400 text-[20px]">psychology</span>
+<span class="text-sm text-gray-200">查看独家买卖逻辑</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-blue-400 text-[20px]">smartphone</span>
+<span class="text-sm text-gray-200">支持 微信/短信 通知</span>
+</div>
+</div>
+</div>
+<!-- Ultra Card -->
+<div class="flex flex-col h-full rounded-xl border border-border-dark bg-surface-dark p-6 transition-transform hover:-translate-y-1 duration-300">
+<div class="mb-5">
+<div class="flex items-center gap-2 mb-1">
+<h2 class="text-white text-lg font-bold">PRO 全站通 (Ultra)</h2>
+<span class="material-symbols-outlined text-accent-gold text-xl">workspace_premium</span>
+</div>
+<p class="text-accent-gold text-sm mb-4">适合资产配置</p>
+<div class="flex items-baseline gap-1 text-white">
+<span class="text-3xl font-black">¥ 699</span>
+<span class="text-sm font-medium text-text-dim">/ 月</span>
+</div>
+</div>
+<button class="w-full h-11 flex items-center justify-center rounded-lg border border-gray-600 hover:border-white hover:bg-gray-800 text-white text-sm font-bold mb-3 transition-colors bg-transparent">
+                        升级 PRO
+                    </button>
+<p class="text-xs text-center text-text-dim mb-6">支持 7 天无理由退款</p>
+<div class="flex flex-col gap-3 flex-1">
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-gray-400 text-[20px]">check_circle</span>
+<span class="text-sm text-gray-300">包含单策略所有功能</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-accent-gold text-[20px]">lock_open</span>
+<span class="text-sm text-gray-300">解锁全站 15+ 个策略</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-accent-gold text-[20px]">analytics</span>
+<span class="text-sm text-gray-300">策略组合与相关性分析</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-accent-gold text-[20px]">rocket_launch</span>
+<span class="text-sm text-gray-300">VIP 极速推送通道</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-accent-gold text-[20px]">download</span>
+<span class="text-sm text-gray-300">交易数据导出</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Footer / Trust Section -->
+<div class="border-t border-border-dark bg-[#16181e] px-6 py-6 md:px-10">
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<!-- Trust Item 1 -->
+<div class="flex items-start gap-4">
+<div class="bg-surface-dark p-2 rounded-lg border border-border-dark shrink-0">
+<span class="material-symbols-outlined text-primary text-2xl">verified_user</span>
+</div>
+<div>
+<h3 class="text-white text-sm font-bold mb-1">7天无理由退款</h3>
+<p class="text-text-dim text-xs leading-relaxed">试用不满意？后台一键全额退款。</p>
+</div>
+</div>
+<!-- Trust Item 2 -->
+<div class="flex items-start gap-4">
+<div class="bg-surface-dark p-2 rounded-lg border border-border-dark shrink-0">
+<span class="material-symbols-outlined text-primary text-2xl">lock</span>
+</div>
+<div>
+<h3 class="text-white text-sm font-bold mb-1">数据安全</h3>
+<p class="text-text-dim text-xs leading-relaxed">SSL 加密支付，不触碰您的资金账号。</p>
+</div>
+</div>
+<!-- Trust Item 3 -->
+<div class="flex items-start gap-4">
+<div class="bg-surface-dark p-2 rounded-lg border border-border-dark shrink-0">
+<span class="material-symbols-outlined text-primary text-2xl">calendar_month</span>
+</div>
+<div>
+<h3 class="text-white text-sm font-bold mb-1">随时取消</h3>
+<p class="text-text-dim text-xs leading-relaxed">订阅可随时管理，下个周期不扣费。</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</body></html>

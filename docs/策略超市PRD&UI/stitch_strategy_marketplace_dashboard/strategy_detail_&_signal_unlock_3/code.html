@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Alpha Trend Strategy - Terminal View</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&amp;family=Noto+Sans:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#135bec",
+                        "primary-hover": "#0e4bca",
+                        "background-dark": "#0F1218",
+                        "background-card": "#1A1F29", 
+                        "background-elevated": "#232936",
+                        "text-main": "#FFFFFF",
+                        "text-secondary": "#9da6b9",
+                        "stock-up": "#ef4444", 
+                        "stock-down": "#10b981", 
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "mono": ["ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", "monospace"]
+                    },
+                    boxShadow: {
+                        'glow': '0 0 20px rgba(19, 91, 236, 0.15)',
+                        'card': '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                    }
+                },
+            },
+        }
+    </script>
+<style type="text/tailwindcss">
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0F1218; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #232936; 
+            border-radius: 4px;
+        }
+        .glass-panel {
+            background: rgba(26, 31, 41, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .pulsing-dot {
+            width: 8px;
+            height: 8px;
+            background-color: #10b981;
+            border-radius: 50%;
+            position: relative;
+        }
+        .pulsing-dot::after {
+            content: '';
+            position: absolute;
+            top: -4px;
+            left: -4px;
+            right: -4px;
+            bottom: -4px;
+            border-radius: 50%;
+            background-color: rgba(16, 185, 129, 0.4);
+            animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+        }
+        @keyframes pulse-ring {
+            0% { transform: scale(0.5); opacity: 0; }
+            50% { opacity: 1; }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+        .sidebar-tab.active {
+            @apply bg-primary/10 text-primary border-r-2 border-primary;
+        }
+        .content-tab.active {
+            @apply border-b-2 border-primary text-white;
+        }
+    </style>
+</head>
+<body class="bg-background-dark font-display text-text-main antialiased selection:bg-primary selection:text-white">
+<header class="w-full border-b border-white/5 bg-background-dark relative z-20">
+<div class="flex h-10 w-full items-center justify-between border-b border-white/5 px-6 bg-background-card/30 backdrop-blur-sm">
+<div class="flex items-center gap-2 text-xs text-text-secondary font-medium">
+<span class="hover:text-white transition-colors cursor-pointer">策略广场</span>
+<span class="text-white/20">&gt;</span>
+<span class="text-white">Alpha Trend Strategy</span>
+</div>
+<nav class="hidden md:flex items-center gap-6">
+<a class="text-xs font-medium text-text-secondary hover:text-white transition-colors" href="#">Market</a>
+<a class="text-xs font-medium text-text-secondary hover:text-white transition-colors" href="#">Strategies</a>
+<a class="text-xs font-medium text-text-secondary hover:text-white transition-colors" href="#">Portfolio</a>
+<div class="h-3 w-px bg-white/10"></div>
+<div class="flex items-center gap-3">
+<button class="text-text-secondary hover:text-white"><span class="material-symbols-outlined text-base">notifications</span></button>
+<div class="h-5 w-5 rounded-full bg-cover bg-center ring-1 ring-white/10" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCl7lNEUaQcO8O72nSwYVPXwgv4IaXRMNfPEMhwkSDgO_syLLp1oF5_W_tROK7OTPD0rCRlLslMlmPO7BSsPf9nue22klTz1WkZ9VdKfIIVe6Y-L0yLYuaBRiqAHRKYYJGFClwveggBAak4b2QACl5FBB2hgzq2tTR_ruZ6Z-2MTHUofaAz8Dc8Yo3gnyzLx9V2D40cREJww4VJp0DzyUBg9dia2bePda7phIWru0-j09gQHVlXgGTNSdHZI1aMs4o57Y6syfZvS74');"></div>
+</div>
+</nav>
+</div>
+<div class="flex flex-col lg:flex-row items-stretch lg:items-center justify-between px-8 py-8 gap-8">
+<div class="flex flex-col gap-4 min-w-[260px]">
+<div>
+<h1 class="text-3xl font-bold text-white tracking-tight leading-tight">Alpha Trend Strategy</h1>
+<p class="text-sm font-medium text-text-secondary mt-1">中小盘轮动趋势增强版</p>
+</div>
+<div class="flex items-center gap-3">
+<div class="flex items-center gap-2 bg-[#10b981]/10 px-2.5 py-1 rounded border border-[#10b981]/20">
+<div class="pulsing-dot"></div>
+<span class="text-xs font-bold text-[#10b981]">实盘运行中</span>
+</div>
+</div>
+<div class="flex flex-wrap gap-2 pt-1">
+<span class="text-[10px] text-text-secondary bg-white/5 px-2 py-0.5 rounded border border-white/5 font-mono tracking-wide uppercase">[趋势型]</span>
+<span class="text-[10px] text-text-secondary bg-white/5 px-2 py-0.5 rounded border border-white/5 font-mono tracking-wide uppercase">[中频]</span>
+<span class="text-[10px] text-text-secondary bg-white/5 px-2 py-0.5 rounded border border-white/5 font-mono tracking-wide uppercase">[BTC/A股]</span>
+</div>
+</div>
+<div class="flex flex-1 flex-col sm:flex-row items-start sm:items-center gap-8 lg:gap-16 border-t sm:border-t-0 sm:border-l border-white/5 pt-6 sm:pt-0 sm:pl-10 lg:pl-16">
+<div class="flex flex-col">
+<span class="text-xs font-bold text-text-secondary uppercase tracking-wider mb-1">年化收益 (CAGR)</span>
+<div class="text-5xl lg:text-6xl font-black text-stock-up font-mono tracking-tighter leading-none">+43.51%</div>
+<div class="flex items-center gap-1 mt-2">
+<span class="text-xs font-medium text-stock-up/80 font-mono">近1年收益: +28.4%</span>
+</div>
+</div>
+<div class="flex flex-col gap-6">
+<div class="flex gap-10">
+<div class="flex flex-col">
+<span class="text-xs font-bold text-text-secondary uppercase tracking-wider mb-1">胜率 (Win Rate)</span>
+<span class="text-3xl font-bold text-white font-mono">67.2%</span>
+</div>
+<div class="flex flex-col">
+<span class="text-xs font-bold text-text-secondary uppercase tracking-wider mb-1">最大回撤</span>
+<span class="text-3xl font-bold text-stock-down font-mono">-18.94%</span>
+</div>
+</div>
+<div class="flex items-center gap-4 text-xs font-medium text-text-secondary/60 font-mono">
+<span>平均持仓: 17.8天</span>
+<span class="h-3 w-px bg-white/10"></span>
+<span>频率: 2次/周</span>
+</div>
+</div>
+</div>
+<div class="flex flex-col justify-center sm:pl-8">
+<div class="flex flex-col gap-2 p-3 bg-gradient-to-r from-background-elevated to-background-card rounded-lg border border-white/10 shadow-lg min-w-[200px]">
+<div class="flex items-center gap-2 mb-1">
+<div class="relative w-2 h-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#10b981] opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-[#10b981]"></span>
+</div>
+<span class="text-[11px] font-bold text-[#10b981] tracking-wide">实时信号直推</span>
+</div>
+<div class="flex flex-col gap-0.5">
+<span class="text-[13px] font-bold text-white">⚡ 立即解锁信号</span>
+<span class="text-[10px] text-text-secondary">支持 微信/短信/App 推送</span>
+</div>
+<button class="mt-2 w-full flex items-center justify-center gap-1.5 rounded bg-primary py-2 text-xs font-bold text-white shadow-glow hover:bg-primary-hover transition-all active:scale-95 whitespace-nowrap group">
+<span>订阅解锁</span>
+<span class="material-symbols-outlined text-xs group-hover:translate-x-1 transition-transform">bolt</span>
+</button>
+</div>
+</div>
+</div>
+</header>
+<div class="flex w-full">
+<aside class="w-72 flex-shrink-0 border-r border-white/5 bg-background-dark pt-6 hidden md:flex md:flex-col">
+<div class="px-6 mb-6 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-sm">history</span>
+<span class="text-[10px] font-bold text-text-secondary uppercase tracking-[0.2em]">历史周期选择</span>
+</div>
+<nav class="flex flex-col w-full">
+<div class="px-6 mb-8">
+<button class="relative w-full text-left p-5 bg-[#1A1F29] border-l-[3px] border-primary shadow-card hover:bg-[#232936] transition-all group rounded-r-sm">
+<div class="flex justify-between items-start mb-2">
+<span class="text-xs font-bold text-white group-hover:text-primary transition-colors">总 (2015-至今)</span>
+</div>
+<div class="text-3xl font-black text-stock-up font-mono tracking-tighter leading-none mb-1">+1,284.5%</div>
+<span class="text-[10px] font-medium text-text-secondary/60 uppercase tracking-wider group-hover:text-text-secondary transition-colors">Cumulative Return</span>
+</button>
+</div>
+<div class="flex flex-col w-full">
+<div class="px-6 mb-2 flex items-center justify-between text-[10px] font-bold text-text-secondary/40 uppercase tracking-wider">
+<span>Period</span>
+<span class="w-24 text-right">Return</span>
+</div>
+<button class="group relative flex w-full items-center justify-between px-6 py-3 border-l-[3px] border-transparent hover:bg-white/5 transition-all">
+<div class="absolute inset-y-0 right-0 bg-gradient-to-l from-stock-up/15 to-transparent transition-all origin-right duration-500 group-hover:from-stock-up/25 z-0" style="width: 15%;"></div>
+<div class="relative z-10 flex items-center gap-2">
+<span class="text-sm font-medium text-text-secondary group-hover:text-white transition-colors">2025</span>
+<div class="flex items-center gap-1.5 bg-[#10b981]/10 px-2 py-0.5 rounded-full border border-[#10b981]/20">
+<span class="relative flex h-1.5 w-1.5">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#10b981] opacity-75"></span>
+<span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#10b981]"></span>
+</span>
+<span class="text-[9px] font-bold text-[#10b981] tracking-widest">RUNNING</span>
+</div>
+</div>
+<span class="relative z-10 w-24 text-right text-sm font-bold text-stock-up font-mono group-hover:scale-105 transition-transform">+12.4%</span>
+</button>
+<div class="h-px bg-white/5 mx-6 w-auto"></div>
+<button class="group relative flex w-full items-center justify-between px-6 py-3 border-l-[3px] border-transparent hover:bg-white/5 transition-all">
+<div class="absolute inset-y-0 right-0 bg-gradient-to-l from-stock-up/15 to-transparent transition-all origin-right duration-500 group-hover:from-stock-up/25 z-0" style="width: 40%;"></div>
+<span class="relative z-10 text-sm font-medium text-text-secondary group-hover:text-white transition-colors">2024</span>
+<span class="relative z-10 w-24 text-right text-sm font-bold text-stock-up font-mono group-hover:scale-105 transition-transform">+45.2%</span>
+</button>
+<div class="h-px bg-white/5 mx-6 w-auto"></div>
+<button class="group relative flex w-full items-center justify-between px-6 py-3 border-l-[3px] border-transparent hover:bg-white/5 transition-all">
+<div class="absolute inset-y-0 right-0 bg-gradient-to-l from-stock-down/15 to-transparent transition-all origin-right duration-500 group-hover:from-stock-down/25 z-0" style="width: 12%;"></div>
+<span class="relative z-10 text-sm font-medium text-text-secondary group-hover:text-white transition-colors">2023</span>
+<span class="relative z-10 w-24 text-right text-sm font-bold text-stock-down font-mono group-hover:scale-105 transition-transform">-12.1%</span>
+</button>
+<div class="h-px bg-white/5 mx-6 w-auto"></div>
+<button class="group relative flex w-full items-center justify-between px-6 py-3 border-l-[3px] border-transparent hover:bg-white/5 transition-all">
+<div class="absolute inset-y-0 right-0 bg-gradient-to-l from-stock-up/15 to-transparent transition-all origin-right duration-500 group-hover:from-stock-up/25 z-0" style="width: 8%;"></div>
+<span class="relative z-10 text-sm font-medium text-text-secondary group-hover:text-white transition-colors">2022</span>
+<span class="relative z-10 w-24 text-right text-sm font-bold text-stock-up font-mono group-hover:scale-105 transition-transform">+8.5%</span>
+</button>
+<div class="h-px bg-white/5 mx-6 w-auto"></div>
+<button class="group relative flex w-full items-center justify-between px-6 py-3 border-l-[3px] border-transparent hover:bg-white/5 transition-all">
+<div class="absolute inset-y-0 right-0 bg-gradient-to-l from-stock-up/15 to-transparent transition-all origin-right duration-500 group-hover:from-stock-up/25 z-0" style="width: 90%;"></div>
+<span class="relative z-10 text-sm font-medium text-text-secondary group-hover:text-white transition-colors">2021</span>
+<span class="relative z-10 w-24 text-right text-sm font-bold text-stock-up font-mono group-hover:scale-105 transition-transform">+112.3%</span>
+</button>
+</div>
+</nav>
+</aside>
+<main class="flex-grow bg-[#0c0e12]">
+<div class="sticky top-0 z-10 flex w-full border-b border-white/5 bg-[#0c0e12]/95 backdrop-blur-sm px-8">
+<button class="content-tab active px-8 py-5 text-sm font-bold transition-all">数据指标</button>
+<button class="content-tab px-8 py-5 text-sm font-medium text-text-secondary hover:text-white transition-all">交易记录</button>
+<button class="content-tab px-8 py-5 text-sm font-medium text-text-secondary hover:text-white transition-all">每日持仓&amp;收益</button>
+</div>
+<div class="p-8 max-w-[1400px]">
+<div class="mb-8">
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-xs font-bold text-text-secondary uppercase tracking-widest">Performance Snapshot</h3>
+<span class="text-[10px] text-text-secondary/50 font-medium">已扣除手续费 (Fees deducted)</span>
+</div>
+<div class="rounded-xl border border-white/5 bg-background-card p-6 md:p-8 shadow-sm">
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-8 pb-8 border-b border-white/5 mb-8">
+<div class="flex flex-col gap-2">
+<span class="text-[11px] font-bold text-text-secondary uppercase tracking-wider">CAGR (年化)</span>
+<span class="text-4xl xl:text-5xl font-black text-stock-up font-mono tracking-tighter">+43.51%</span>
+</div>
+<div class="flex flex-col gap-2">
+<span class="text-[11px] font-bold text-text-secondary uppercase tracking-wider">Win Rate (胜率)</span>
+<span class="text-4xl xl:text-5xl font-black text-white font-mono tracking-tighter">67.2%</span>
+</div>
+<div class="flex flex-col gap-2">
+<span class="text-[11px] font-bold text-text-secondary uppercase tracking-wider">Max Drawdown</span>
+<span class="text-4xl xl:text-5xl font-black text-stock-down font-mono tracking-tighter">-18.94%</span>
+</div>
+<div class="flex flex-col gap-2">
+<span class="text-[11px] font-bold text-text-secondary uppercase tracking-wider">Avg Holding</span>
+<div class="flex items-baseline gap-1">
+<span class="text-4xl xl:text-5xl font-black text-white font-mono tracking-tighter">17.8</span>
+<span class="text-lg font-medium text-text-secondary ml-1">Days</span>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-y-8 gap-x-12">
+<div class="flex flex-col">
+<div class="flex items-center justify-between py-3 border-b border-white/[0.04] group">
+<span class="text-xs font-medium text-text-secondary group-hover:text-white transition-colors">策略区间收益</span>
+<span class="text-sm font-bold text-stock-up font-mono">+42.07%</span>
+</div>
+<div class="flex items-center justify-between py-3 border-b border-white/[0.04] group">
+<span class="text-xs font-medium text-text-secondary group-hover:text-white transition-colors">基准收益</span>
+<span class="text-sm font-bold text-white font-mono">+35.02%</span>
+</div>
+<div class="flex items-center justify-between py-3 border-b border-white/[0.04] group">
+<span class="text-xs font-medium text-text-secondary group-hover:text-white transition-colors">超额收益</span>
+<span class="text-sm font-bold text-stock-up font-mono">+5.22%</span>
+</div>
+<div class="flex items-center justify-between py-3 border-b border-white/[0.04] group last:border-0">
+<span class="text-xs font-medium text-text-secondary group-hover:text-white transition-colors">波动率 (Volatility)</span>
+<span class="text-sm font-bold text-white font-mono">15.4%</span>
+</div>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center justify-between py-3 border-b border-white/[0.04] group">
+<span class="text-xs font-medium text-text-secondary group-hover:text-white transition-colors">盈亏比 (P/L Ratio)</span>
+<span class="text-sm font-bold text-white font-mono">2.18</span>
+</div>
+<div class="flex items-center justify-between py-3 border-b border-white/[0.04] group">
+<span class="text-xs font-medium text-text-secondary group-hover:text-white transition-colors">胜负场</span>
+<span class="text-sm font-bold text-white font-mono">45胜 / 22负</span>
+</div>
+<div class="flex items-center justify-between py-3 border-b border-white/[0.04] group">
+<span class="text-xs font-medium text-text-secondary group-hover:text-white transition-colors">超额最大回撤 (Excess DD)</span>
+<span class="text-sm font-bold text-stock-down font-mono">-19.12%</span>
+</div>
+<div class="flex items-center justify-between py-3 border-b border-white/[0.04] group last:border-0">
+<span class="text-xs font-medium text-text-secondary group-hover:text-white transition-colors">回撤区间</span>
+<span class="text-sm font-bold text-white font-mono">2025/03/18 - 2025/04/25</span>
+</div>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center justify-between py-3 border-b border-white/[0.04] group">
+<span class="text-xs font-medium text-text-secondary group-hover:text-white transition-colors">夏普比率 (Sharpe)</span>
+<span class="text-sm font-bold text-white font-mono">2.45</span>
+</div>
+<div class="flex items-center justify-between py-3 border-b border-white/[0.04] group">
+<span class="text-xs font-medium text-text-secondary group-hover:text-white transition-colors">索提诺比率 (Sortino)</span>
+<span class="text-sm font-bold text-white font-mono">3.12</span>
+</div>
+<div class="flex items-center justify-between py-3 border-b border-white/[0.04] group">
+<span class="text-xs font-medium text-text-secondary group-hover:text-white transition-colors">卡玛比率 (Calmar)</span>
+<span class="text-sm font-bold text-white font-mono">2.30</span>
+</div>
+<div class="flex items-center justify-between py-3 border-b border-white/[0.04] group last:border-0">
+<span class="text-xs font-medium text-text-secondary group-hover:text-white transition-colors">Alpha (α) | Beta (β)</span>
+<span class="text-sm font-bold text-white font-mono">0.13 | 0.80</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="rounded-2xl border border-white/5 bg-background-card shadow-xl overflow-hidden flex flex-col h-[600px]">
+<div class="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-background-card/50">
+<h4 class="text-lg font-bold text-white">收益走势图 (Cumulative Return)</h4>
+<div class="flex items-center gap-4">
+<button class="flex items-center gap-2 text-xs font-medium text-white bg-white/5 px-3 py-1.5 rounded hover:bg-white/10 transition-colors border border-white/10 group">
+<span class="material-symbols-outlined text-sm text-primary">check_box</span>
+<span>对比基准 (Benchmark)</span>
+</button>
+<button class="flex items-center gap-2 text-xs font-medium text-text-secondary hover:text-white px-3 py-1.5 rounded hover:bg-white/5 transition-colors group">
+<span class="material-symbols-outlined text-sm text-text-secondary/50 group-hover:text-white">check_box_outline_blank</span>
+<span>显示回撤 (Drawdown)</span>
+</button>
+</div>
+</div>
+<div class="flex flex-col flex-grow p-6 h-full relative">
+<div class="relative flex-grow h-[65%] w-full mb-1">
+<div class="absolute top-10 left-[60%] z-30 bg-[#232936] border border-white/10 shadow-2xl rounded-lg p-3 min-w-[160px] backdrop-blur-md bg-opacity-95">
+<div class="text-[11px] font-semibold text-text-secondary mb-2 border-b border-white/5 pb-1.5">2024-08-15</div>
+<div class="flex justify-between items-center text-xs mb-1.5">
+<span class="text-text-secondary/80">Strategy</span>
+<span class="font-mono font-bold text-stock-up">+45.2%</span>
+</div>
+<div class="flex justify-between items-center text-xs mb-1.5">
+<span class="text-text-secondary/80">Benchmark</span>
+<span class="font-mono font-bold text-white">+12.0%</span>
+</div>
+<div class="flex justify-between items-center text-xs pt-1.5 mt-0.5 border-t border-white/5">
+<span class="text-text-secondary/80">Outperform</span>
+<span class="font-mono font-bold text-stock-up">+33.2%</span>
+</div>
+</div>
+<div class="absolute top-0 bottom-0 left-[60%] w-px bg-white/10 border-r border-dashed border-white/30 pointer-events-none z-10"></div>
+<div class="absolute top-[28%] left-[60%] w-3 h-3 bg-stock-up rounded-full border-2 border-white shadow-[0_0_15px_rgba(239,68,68,0.5)] -translate-x-1.5 -translate-y-1.5 z-20 animate-pulse"></div>
+<svg class="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 1000 300">
+<defs>
+<linearGradient id="mainChartGradient" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#ef4444" stop-opacity="0.25"></stop>
+<stop offset="100%" stop-color="#ef4444" stop-opacity="0"></stop>
+</linearGradient>
+</defs>
+<line stroke="#FFFFFF" stroke-dasharray="4 4" stroke-opacity="0.03" x1="0" x2="1000" y1="0" y2="0"></line>
+<line stroke="#FFFFFF" stroke-dasharray="4 4" stroke-opacity="0.03" x1="0" x2="1000" y1="75" y2="75"></line>
+<line stroke="#FFFFFF" stroke-dasharray="4 4" stroke-opacity="0.03" x1="0" x2="1000" y1="150" y2="150"></line>
+<line stroke="#FFFFFF" stroke-dasharray="4 4" stroke-opacity="0.03" x1="0" x2="1000" y1="225" y2="225"></line>
+<line stroke="#FFFFFF" stroke-opacity="0.1" x1="0" x2="1000" y1="300" y2="300"></line>
+<path d="M0 250 C 100 240, 200 245, 300 230 C 400 235, 500 220, 600 210 C 700 200, 800 205, 900 190 L 1000 180" fill="none" opacity="0.7" stroke="#6b7280" stroke-dasharray="5 3" stroke-width="1.5"></path>
+<path d="M0 250 C 150 240, 250 200, 350 180 C 450 160, 550 140, 600 85 C 700 100, 800 60, 1000 40 L 1000 300 L 0 300 Z" fill="url(#mainChartGradient)"></path>
+<path d="M0 250 C 150 240, 250 200, 350 180 C 450 160, 550 140, 600 85 C 700 100, 800 60, 1000 40" fill="none" stroke="#ef4444" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
+</svg>
+<div class="flex justify-between mt-2 px-1 text-[10px] text-text-secondary/60 font-mono uppercase tracking-wide">
+<span>Jan '24</span>
+<span>Mar '24</span>
+<span>Jun '24</span>
+<span>Sep '24</span>
+<span>Dec '24</span>
+</div>
+</div>
+<div class="h-[20%] w-full mt-4 relative border-t border-white/5 pt-3">
+<div class="absolute top-3 left-2 text-[9px] text-text-secondary/50 font-bold uppercase tracking-wider">Drawdown</div>
+<svg class="w-full h-full" preserveAspectRatio="none" viewBox="0 0 1000 100">
+<path d="M0 0 L 100 0 L 120 10 L 150 40 L 200 10 L 250 0 L 300 0 L 320 5 L 400 30 L 500 10 L 550 0 L 600 0 L 650 15 L 700 45 L 750 20 L 800 5 L 850 0 L 900 0 L 950 10 L 1000 0" fill="#52C41A" fill-opacity="0.15" stroke="none"></path>
+<path d="M0 0 L 100 0 L 120 10 L 150 40 L 200 10 L 250 0 L 300 0 L 320 5 L 400 30 L 500 10 L 550 0 L 600 0 L 650 15 L 700 45 L 750 20 L 800 5 L 850 0 L 900 0 L 950 10 L 1000 0" fill="none" stroke="#52C41A" stroke-opacity="0.8" stroke-width="1"></path>
+<line stroke="#FFFFFF" stroke-dasharray="2 2" stroke-opacity="0.03" x1="0" x2="1000" y1="50" y2="50"></line>
+</svg>
+</div>
+<div class="h-[10%] w-full mt-3 flex gap-1">
+<div class="h-full flex-1 bg-stock-up/20 rounded-sm hover:bg-stock-up/40 transition-colors cursor-crosshair border border-transparent hover:border-white/10" title="Jan: +2.1%"></div>
+<div class="h-full flex-1 bg-stock-up/40 rounded-sm hover:bg-stock-up/60 transition-colors cursor-crosshair border border-transparent hover:border-white/10" title="Feb: +4.5%"></div>
+<div class="h-full flex-1 bg-[#10b981]/30 rounded-sm hover:bg-[#10b981]/50 transition-colors cursor-crosshair border border-transparent hover:border-white/10" title="Mar: -1.2%"></div>
+<div class="h-full flex-1 bg-stock-up/60 rounded-sm hover:bg-stock-up/80 transition-colors cursor-crosshair border border-transparent hover:border-white/10" title="Apr: +6.2%"></div>
+<div class="h-full flex-1 bg-stock-up/10 rounded-sm hover:bg-stock-up/30 transition-colors cursor-crosshair border border-transparent hover:border-white/10" title="May: +0.8%"></div>
+<div class="h-full flex-1 bg-[#10b981]/20 rounded-sm hover:bg-[#10b981]/40 transition-colors cursor-crosshair border border-transparent hover:border-white/10" title="Jun: -0.5%"></div>
+<div class="h-full flex-1 bg-stock-up/80 rounded-sm hover:bg-stock-up/100 transition-colors cursor-crosshair border border-transparent hover:border-white/10" title="Jul: +8.5%"></div>
+<div class="h-full flex-1 bg-stock-up/30 rounded-sm hover:bg-stock-up/50 transition-colors cursor-crosshair border border-transparent hover:border-white/10" title="Aug: +3.1%"></div>
+<div class="h-full flex-1 bg-stock-up/50 rounded-sm hover:bg-stock-up/70 transition-colors cursor-crosshair border border-transparent hover:border-white/10" title="Sep: +5.0%"></div>
+<div class="h-full flex-1 bg-[#10b981]/10 rounded-sm hover:bg-[#10b981]/30 transition-colors cursor-crosshair border border-transparent hover:border-white/10" title="Oct: -0.1%"></div>
+<div class="h-full flex-1 bg-stock-up/90 rounded-sm hover:bg-stock-up/100 transition-colors cursor-crosshair border border-transparent hover:border-white/10" title="Nov: +9.2%"></div>
+<div class="h-full flex-1 bg-stock-up/40 rounded-sm hover:bg-stock-up/60 transition-colors cursor-crosshair border border-transparent hover:border-white/10" title="Dec: +4.2%"></div>
+</div>
+<div class="flex justify-end mt-1 px-1">
+<span class="text-[9px] text-text-secondary/40 font-mono uppercase tracking-widest">Monthly Returns Heatmap</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>
