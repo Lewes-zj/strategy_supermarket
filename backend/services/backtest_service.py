@@ -3,9 +3,10 @@
 
 from datetime import date, timedelta
 from typing import Dict, List, Optional, Callable
+import hashlib
+import json
 import pandas as pd
 import numpy as np
-from decimal import Decimal
 
 from engine.models import BacktestResult, WalkForwardResult, MonteCarloResult
 from engine.backtester import EventDrivenBacktester, Strategy
@@ -81,8 +82,10 @@ class BacktestService:
         if not symbols:
             raise ValueError("Symbols list cannot be empty")
 
-        # 检查缓存
-        cache_key = f"{strategy_id}:{','.join(sorted(symbols))}:{start_date}:{end_date}"
+        # 检查缓存 - include strategy_params in cache key
+        params_json = json.dumps(strategy_params, sort_keys=True, default=str)
+        params_hash = hashlib.md5(params_json.encode()).hexdigest()
+        cache_key = f"{strategy_id}:{','.join(sorted(symbols))}:{start_date}:{end_date}:{params_hash}"
         cached = self.cache.get(cache_key)
         if cached:
             return cached
