@@ -154,8 +154,8 @@ def run_backtest(strategy_id: str, symbols: List[str] = None, use_real_data: boo
         symbols = strategy_info.default_symbols
 
     # Check cache in database
-    # Use 3 years of data (750 trading days)
-    start_dt = (datetime.now() - pd.Timedelta(days=365*3)).date()
+    # Use 10 years of data
+    start_dt = (datetime.now() - pd.Timedelta(days=365*10)).date()
     end_dt = datetime.now().date()
 
     with get_session() as session:
