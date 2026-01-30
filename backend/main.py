@@ -233,8 +233,13 @@ def run_backtest(strategy_id: str, symbols: List[str] = None, use_real_data: boo
     if "symbol" in data.columns:
         data = data[data["symbol"] == symbol].copy()
 
+    # Convert to dict format for new EventDrivenBacktester
+    # The new backtester expects Dict[str, pd.DataFrame]
+    data_dict = {symbol: data}
+
     # Run backtest
-    equity_df = backtester.run(data)
+    result = backtester.run(data_dict)
+    equity_df = result.equity_curve if hasattr(result, 'equity_curve') else result
     metrics = _calculate_metrics(equity_df["returns"])
 
     # Save to database cache
@@ -259,7 +264,13 @@ def run_backtest(strategy_id: str, symbols: List[str] = None, use_real_data: boo
                 for idx, row in equity_df.iterrows()
             ]
             equity_json = json.dumps(equity_records)
-            trades_list = [{"timestamp": str(t[0]), "equity": float(t[1])} for t in backtester.equity_curve]
+            # Get trades from result (new format returns BacktestResult with trades list)
+            trades_list = []
+            if hasattr(result, 'trades'):
+                trades_list = [
+                    {"timestamp": str(t.timestamp), "symbol": t.order.symbol, "side": t.order.side.value}
+                    for t in result.trades
+                ]
 
             if existing:
                 existing.equity_curve = equity_json
