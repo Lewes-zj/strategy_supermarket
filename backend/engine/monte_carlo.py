@@ -129,8 +129,9 @@ class MonteCarloAnalyzer:
     def _return_confidence_interval(self, simulations: np.ndarray) -> Tuple[float, float]:
         """计算收益置信区间"""
         total_returns = (1 + simulations).prod(axis=1) - 1
-        lower = (1 - self.confidence) / 2 * 100
-        upper = (1 - lower / 100) * 100
+        alpha = (1 - self.confidence) * 100  # e.g., 5 for 95% confidence
+        lower = alpha / 2                     # e.g., 2.5
+        upper = 100 - alpha / 2               # e.g., 97.5
         return (
             float(np.percentile(total_returns, lower)),
             float(np.percentile(total_returns, upper))
