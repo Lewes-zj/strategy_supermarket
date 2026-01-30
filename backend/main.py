@@ -9,9 +9,29 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Import Engine
-from engine.backtester import Backtester, SimpleExecutionModel
+# Import Engine - try new modular engine first, fall back to legacy
+try:
+    from engine.backtester import EventDrivenBacktester as Backtester, Strategy
+    from engine.execution import CompositeExecutionModel as SimpleExecutionModel
+    from engine.models import Order, OrderSide, OrderType, Fill
+    NEW_ENGINE = True
+except ImportError:
+    # Legacy imports
+    from engine.backtester import Backtester, SimpleExecutionModel
+    NEW_ENGINE = False
+
 from engine.data_loader import generate_mock_data, fetch_stock_data
+
+# Import new modular engine components
+try:
+    from services.backtest_service import BacktestService
+    from engine.backtester import EventDrivenBacktester
+    from engine.walk_forward import WalkForwardOptimizer
+    from engine.monte_carlo import MonteCarloAnalyzer
+    ADVANCED_ENGINE_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"Advanced engine components not available: {e}")
+    ADVANCED_ENGINE_AVAILABLE = False
 
 # Import new modules
 from strategies.registry import (
@@ -43,6 +63,15 @@ app.add_middleware(
 # In a real app, this would be a database or Redis
 STRATEGY_RESULTS = {}
 
+# --- Initialize BacktestService ---
+backtest_service = None
+if ADVANCED_ENGINE_AVAILABLE:
+    try:
+        backtest_service = BacktestService()
+        logger.info("BacktestService initialized successfully")
+    except Exception as e:
+        logger.warning(f"Failed to initialize BacktestService: {e}")
+
 # --- STARTUP EVENTS ---
 
 @app.on_event("startup")
@@ -64,6 +93,39 @@ async def startup_event():
         print("✓ Background scheduler started")
     except Exception as e:
         print(f"⚠ Scheduler start failed: {e}")
+
+    # Register strategies with BacktestService
+    if backtest_service is not None:
+        try:
+            from strategies.alpha_trend import AlphaTrendStrategy
+            backtest_service.register_strategy("alpha_trend", AlphaTrendStrategy)
+            print("✓ Registered alpha_trend strategy with BacktestService")
+
+            # Register other available strategies
+            try:
+                from strategies.momentum import MomentumStrategy
+                backtest_service.register_strategy("momentum", MomentumStrategy)
+                print("✓ Registered momentum strategy with BacktestService")
+            except ImportError:
+                pass
+
+            try:
+                from strategies.mean_reversion import MeanReversionStrategy
+                backtest_service.register_strategy("mean_reversion", MeanReversionStrategy)
+                print("✓ Registered mean_reversion strategy with BacktestService")
+            except ImportError:
+                pass
+
+            try:
+                from strategies.sector_rotation import SectorRotationStrategy
+                backtest_service.register_strategy("sector_rotation", SectorRotationStrategy)
+                print("✓ Registered sector_rotation strategy with BacktestService")
+            except ImportError:
+                pass
+
+            print("✓ Strategies registered with BacktestService")
+        except Exception as e:
+            print(f"⚠ Strategy registration failed: {e}")
 
 
 # --- BACKTEST HELPERS ---
@@ -638,6 +700,105 @@ def get_detailed_metrics(id: str):
             "desc": "回撤区间"
         }
     }
+
+
+@app.get("/api/strategies/{id}/walk-forward")
+def get_walk_forward_analysis(
+    id: str,
+    train_days: int = Query(252, description="Training period days"),
+    test_days: int = Query(63, description="Test period days")
+):
+    """Run Walk-Forward optimization analysis."""
+    if not ADVANCED_ENGINE_AVAILABLE or backtest_service is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Walk-Forward analysis not available. Advanced engine components not initialized."
+        )
+
+    try:
+        # Verify strategy is registered
+        if backtest_service.get_strategy_factory(id) is None:
+            # Try to register dynamically based on strategy_id
+            strategy_info = get_strategy_info(id)
+            if not strategy_info:
+                raise HTTPException(status_code=404, detail=f"Strategy '{id}' not found")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Strategy '{id}' not registered with BacktestService"
+            )
+
+        # Define parameter grid based on strategy
+        param_grid = {
+            "short_window": [5, 10, 20],
+            "long_window": [20, 40, 60]
+        }
+
+        result = backtest_service.run_walk_forward(
+            strategy_id=id,
+            param_grid=param_grid,
+            train_days=train_days,
+            test_days=test_days
+        )
+
+        return {
+            "stability_score": result.stability_score,
+            "param_history": result.param_history,
+            "split_count": len(result.split_results)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Walk-Forward error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/strategies/{id}/monte-carlo")
+def get_monte_carlo_analysis(
+    id: str,
+    n_simulations: int = Query(1000, description="Number of simulations")
+):
+    """Run Monte Carlo risk analysis."""
+    if not ADVANCED_ENGINE_AVAILABLE or backtest_service is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Monte Carlo analysis not available. Advanced engine components not initialized."
+        )
+
+    try:
+        # Verify strategy is registered
+        if backtest_service.get_strategy_factory(id) is None:
+            strategy_info = get_strategy_info(id)
+            if not strategy_info:
+                raise HTTPException(status_code=404, detail=f"Strategy '{id}' not found")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Strategy '{id}' not registered with BacktestService"
+            )
+
+        result = backtest_service.run_monte_carlo(
+            strategy_id=id,
+            n_simulations=n_simulations
+        )
+
+        return {
+            "var_95": result.var_95,
+            "cvar_95": result.cvar_95,
+            "expected_max_drawdown": result.expected_max_drawdown,
+            "probability_of_loss": result.probability_of_loss,
+            "confidence_interval": {
+                "lower": result.return_confidence_interval[0],
+                "upper": result.return_confidence_interval[1]
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Monte Carlo error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/strategies/{id}/drawdown")

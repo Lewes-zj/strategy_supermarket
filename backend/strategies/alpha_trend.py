@@ -8,7 +8,8 @@ import os
 # Add parent directory to path to allow imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from engine.backtester import Strategy, Order, OrderSide, OrderType, Fill
+from engine.backtester import Strategy
+from engine.models import Order, OrderSide, OrderType, Fill
 
 class AlphaTrendStrategy(Strategy):
     """

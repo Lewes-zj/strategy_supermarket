@@ -12,7 +12,8 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from engine.backtester import Strategy, Order, OrderSide, OrderType, Fill
+from engine.backtester import Strategy
+from engine.models import Order, OrderSide, OrderType, Fill
 
 
 class SectorRotationStrategy(Strategy):
