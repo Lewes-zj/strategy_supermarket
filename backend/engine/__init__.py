@@ -5,9 +5,15 @@ from .models import (
     PerformanceMetrics, BacktestResult, WalkForwardResult, MonteCarloResult
 )
 from .portfolio import Portfolio
+from .execution import (
+    ExecutionModel, MarketExecutionModel, LimitExecutionModel,
+    StopExecutionModel, CompositeExecutionModel
+)
 
 __all__ = [
     "OrderSide", "OrderType", "Order", "Fill", "Position", "Trade",
     "PerformanceMetrics", "BacktestResult", "WalkForwardResult", "MonteCarloResult",
-    "Portfolio"
+    "Portfolio",
+    "ExecutionModel", "MarketExecutionModel", "LimitExecutionModel",
+    "StopExecutionModel", "CompositeExecutionModel"
 ]
