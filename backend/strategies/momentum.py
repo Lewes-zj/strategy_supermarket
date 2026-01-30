@@ -206,6 +206,10 @@ class MomentumStrategy(Strategy):
         plus_dm[(up_move > down_move) & (up_move > 0)] = up_move
         minus_dm[(down_move > up_move) & (down_move > 0)] = down_move
 
+        # Fill NaN with 0 (when conditions are not met)
+        plus_dm = plus_dm.fillna(0)
+        minus_dm = minus_dm.fillna(0)
+
         # Smooth
         atr = tr.rolling(window=period).mean()
         plus_di = 100 * (plus_dm.rolling(window=period).mean() / atr)
