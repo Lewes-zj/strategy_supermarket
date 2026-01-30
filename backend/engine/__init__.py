@@ -4,8 +4,10 @@ from .models import (
     OrderSide, OrderType, Order, Fill, Position, Trade,
     PerformanceMetrics, BacktestResult, WalkForwardResult, MonteCarloResult
 )
+from .portfolio import Portfolio
 
 __all__ = [
     "OrderSide", "OrderType", "Order", "Fill", "Position", "Trade",
-    "PerformanceMetrics", "BacktestResult", "WalkForwardResult", "MonteCarloResult"
+    "PerformanceMetrics", "BacktestResult", "WalkForwardResult", "MonteCarloResult",
+    "Portfolio"
 ]
