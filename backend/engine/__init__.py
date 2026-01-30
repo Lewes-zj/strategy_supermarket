@@ -11,6 +11,7 @@ from .execution import (
 )
 from .metrics import calculate_metrics
 from .walk_forward import WalkForwardOptimizer
+from .monte_carlo import MonteCarloAnalyzer
 
 __all__ = [
     "OrderSide", "OrderType", "Order", "Fill", "Position", "Trade",
@@ -19,5 +20,6 @@ __all__ = [
     "ExecutionModel", "MarketExecutionModel", "LimitExecutionModel",
     "StopExecutionModel", "CompositeExecutionModel",
     "calculate_metrics",
-    "WalkForwardOptimizer"
+    "WalkForwardOptimizer",
+    "MonteCarloAnalyzer"
 ]
