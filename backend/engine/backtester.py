@@ -1,191 +1,208 @@
+# backend/engine/backtester.py
+"""
+事件驱动回测器：支持多标的、T+1执行、基准对比
+"""
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from datetime import datetime
 from decimal import Decimal
-from enum import Enum
-from typing import Dict, List, Optional
+from datetime import datetime
+from typing import Dict, List, Optional, Tuple
 import pandas as pd
-import numpy as np
 
-class OrderSide(Enum):
-    BUY = "buy"
-    SELL = "sell"
+from .models import (
+    Order, Fill, Position, BacktestResult, PerformanceMetrics
+)
+from .portfolio import Portfolio
+from .execution import ExecutionModel, CompositeExecutionModel
+from .metrics import calculate_metrics
 
-class OrderType(Enum):
-    MARKET = "market"
-    LIMIT = "limit"
-    STOP = "stop"
-
-@dataclass
-class Order:
-    symbol: str
-    side: OrderSide
-    quantity: Decimal
-    order_type: OrderType
-    limit_price: Optional[Decimal] = None
-    stop_price: Optional[Decimal] = None
-    timestamp: Optional[datetime] = None
-
-@dataclass
-class Fill:
-    order: Order
-    fill_price: Decimal
-    fill_quantity: Decimal
-    commission: Decimal
-    slippage: Decimal
-    timestamp: datetime
-
-@dataclass
-class Position:
-    symbol: str
-    quantity: Decimal = Decimal("0")
-    avg_cost: Decimal = Decimal("0")
-    realized_pnl: Decimal = Decimal("0")
-
-    def update(self, fill: Fill) -> None:
-        if fill.order.side == OrderSide.BUY:
-            new_quantity = self.quantity + fill.fill_quantity
-            if new_quantity != 0:
-                self.avg_cost = (
-                    (self.quantity * self.avg_cost + fill.fill_quantity * fill.fill_price)
-                    / new_quantity
-                )
-            self.quantity = new_quantity
-        else:
-            self.realized_pnl += fill.fill_quantity * (fill.fill_price - self.avg_cost)
-            self.quantity -= fill.fill_quantity
-
-@dataclass
-class Portfolio:
-    cash: Decimal
-    positions: Dict[str, Position] = field(default_factory=dict)
-    initial_capital: Decimal = Decimal("0")
-
-    def get_position(self, symbol: str) -> Position:
-        if symbol not in self.positions:
-            self.positions[symbol] = Position(symbol=symbol)
-        return self.positions[symbol]
-
-    def process_fill(self, fill: Fill) -> None:
-        position = self.get_position(fill.order.symbol)
-        position.update(fill)
-
-        if fill.order.side == OrderSide.BUY:
-            self.cash -= fill.fill_price * fill.fill_quantity + fill.commission
-        else:
-            self.cash += fill.fill_price * fill.fill_quantity - fill.commission
-
-    def get_equity(self, prices: Dict[str, Decimal]) -> Decimal:
-        equity = self.cash
-        for symbol, position in self.positions.items():
-            if position.quantity != 0 and symbol in prices:
-                equity += position.quantity * prices[symbol]
-        return equity
 
 class Strategy(ABC):
+    """策略抽象基类"""
+
     @abstractmethod
     def on_bar(self, timestamp: datetime, data: pd.DataFrame) -> List[Order]:
+        """
+        处理K线数据，生成交易订单
+
+        Args:
+            timestamp: 当前时间戳
+            data: 截止到当前时间的所有数据（避免look-ahead）
+
+        Returns:
+            订单列表
+        """
         pass
 
     @abstractmethod
     def on_fill(self, fill: Fill) -> None:
+        """
+        处理成交通知
+
+        Args:
+            fill: 成交记录
+        """
         pass
 
-class ExecutionModel(ABC):
-    @abstractmethod
-    def execute(self, order: Order, bar: pd.Series) -> Optional[Fill]:
-        pass
 
-class SimpleExecutionModel(ExecutionModel):
-    def __init__(self, slippage_bps: float = 10, commission_per_share: float = 0.01):
-        self.slippage_bps = slippage_bps
-        self.commission_per_share = commission_per_share
+class EventDrivenBacktester:
+    """
+    事件驱动回测器
 
-    def execute(self, order: Order, bar: pd.Series) -> Optional[Fill]:
-        if order.order_type == OrderType.MARKET:
-            base_price = Decimal(str(bar["close"])) # Default to close if open not robust, or use open for next bar execution
+    特点:
+    - 支持多标的回测
+    - T+1开盘价执行（避免look-ahead bias）
+    - 支持基准对比计算Alpha/Beta
+    """
 
-            # Apply slippage
-            slippage_mult = 1 + (self.slippage_bps / 10000)
-            if order.side == OrderSide.BUY:
-                fill_price = base_price * Decimal(str(slippage_mult))
-            else:
-                fill_price = base_price / Decimal(str(slippage_mult))
-
-            commission = order.quantity * Decimal(str(self.commission_per_share))
-            slippage = abs(fill_price - base_price) * order.quantity
-
-            return Fill(
-                order=order,
-                fill_price=fill_price,
-                fill_quantity=order.quantity,
-                commission=commission,
-                slippage=slippage,
-                timestamp=bar.name if isinstance(bar.name, datetime) else datetime.now()
-            )
-        return None
-
-class Backtester:
     def __init__(
         self,
         strategy: Strategy,
-        execution_model: ExecutionModel,
-        initial_capital: Decimal = Decimal("100000")
+        execution_model: ExecutionModel = None,
+        initial_capital: Decimal = Decimal("1000000"),
+        benchmark_symbol: str = "000300"
     ):
         self.strategy = strategy
-        self.execution_model = execution_model
-        self.portfolio = Portfolio(cash=initial_capital, initial_capital=initial_capital)
-        self.equity_curve: List[tuple] = []
+        self.execution_model = execution_model or CompositeExecutionModel()
+        self.initial_capital = initial_capital
+        self.benchmark_symbol = benchmark_symbol
+
+        # 状态
+        self.portfolio: Optional[Portfolio] = None
+        self.equity_curve: List[Tuple[datetime, float]] = []
+        self.benchmark_curve: List[Tuple[datetime, float]] = []
         self.trades: List[Fill] = []
 
-    def run(self, data: pd.DataFrame) -> pd.DataFrame:
-        """Run backtest on OHLCV data with DatetimeIndex."""
+    def run(
+        self,
+        data: Dict[str, pd.DataFrame],
+        benchmark_data: pd.DataFrame = None
+    ) -> BacktestResult:
+        """
+        运行回测
+
+        Args:
+            data: {symbol: DataFrame} 多标的OHLCV数据
+            benchmark_data: 基准指数数据
+
+        Returns:
+            BacktestResult
+        """
+        # 初始化
+        self.portfolio = Portfolio(
+            cash=self.initial_capital,
+            initial_capital=self.initial_capital
+        )
+        self.equity_curve = []
+        self.benchmark_curve = []
+        self.trades = []
+
+        # 获取所有交易日
+        all_dates = self._get_all_dates(data)
         pending_orders: List[Order] = []
-        
-        # Ensure index is datetime
-        if not isinstance(data.index, pd.DatetimeIndex):
-            if 'date' in data.columns:
-                data.set_index('date', inplace=True)
-                data.index = pd.to_datetime(data.index)
 
-        for timestamp, bar in data.iterrows():
-            # Execute pending orders at today's prices (assuming Market On Open or Close)
-            # For simplicity using Close of current bar as execution price for orders generated in PREVIOUS bar
-            # But here we are generating orders in CURRENT bar. 
-            # Standard pattern: 
-            # 1. Open of Today: Execute orders from Yesterday
-            # 2. Close of Today: Calculate new signals -> Order for Tomorrow
-            
-            # Simplified flow: Orders executed at current bar Close immediately (Slight lookahead if using Close to generate signal)
-            # Correct flow: Orders generated at T, executed at T+1 Open.
-            
-            # Let's check pending orders FIRST (from T-1)
-            next_pending = []
+        for i, timestamp in enumerate(all_dates):
+            # 获取当日各标的数据
+            current_bars = self._get_bars_at(data, timestamp)
+            next_bars = self._get_bars_at(data, all_dates[i + 1]) if i + 1 < len(all_dates) else {}
+
+            # 执行待处理订单
+            new_pending = []
             for order in pending_orders:
-                fill = self.execution_model.execute(order, bar)
-                if fill:
-                    self.portfolio.process_fill(fill)
-                    self.strategy.on_fill(fill)
-                    self.trades.append(fill)
-                else:
-                    next_pending.append(order)
-            pending_orders = next_pending
+                if order.symbol in current_bars:
+                    current_bar = current_bars[order.symbol]
+                    next_bar = next_bars.get(order.symbol)
+                    fill = self.execution_model.execute(order, current_bar, next_bar)
+                    if fill:
+                        self.portfolio.process_fill(fill)
+                        self.strategy.on_fill(fill)
+                        self.trades.append(fill)
+                    else:
+                        new_pending.append(order)
+            pending_orders = new_pending
 
-            # Get current prices for equity calculation
-            current_close = Decimal(str(bar["close"]))
-            prices = {bar["symbol"] if "symbol" in bar else "default": current_close}
+            # 计算当日权益
+            prices = {
+                symbol: Decimal(str(bar["close"]))
+                for symbol, bar in current_bars.items()
+            }
             equity = self.portfolio.get_equity(prices)
             self.equity_curve.append((timestamp, float(equity)))
 
-            # Generate new orders for next bar
-            # Pass data up to current timestamp to avoid lookahead
-            new_orders = self.strategy.on_bar(timestamp, data.loc[:timestamp])
+            # 记录基准
+            if benchmark_data is not None and timestamp in benchmark_data.index:
+                bench_val = benchmark_data.loc[timestamp, "close"]
+                self.benchmark_curve.append((timestamp, float(bench_val)))
+
+            # 生成新订单
+            combined_data = self._combine_data_up_to(data, timestamp)
+            new_orders = self.strategy.on_bar(timestamp, combined_data)
             pending_orders.extend(new_orders)
 
-        return self._create_results()
+        return self._create_result(benchmark_data)
 
-    def _create_results(self) -> pd.DataFrame:
+    def _get_all_dates(self, data: Dict[str, pd.DataFrame]) -> List[datetime]:
+        """获取所有交易日期的并集"""
+        all_dates = set()
+        for df in data.values():
+            all_dates.update(df.index.tolist())
+        return sorted(all_dates)
+
+    def _get_bars_at(
+        self,
+        data: Dict[str, pd.DataFrame],
+        timestamp: datetime
+    ) -> Dict[str, pd.Series]:
+        """获取指定时间点的所有标的数据"""
+        bars = {}
+        for symbol, df in data.items():
+            if timestamp in df.index:
+                bars[symbol] = df.loc[timestamp]
+        return bars
+
+    def _combine_data_up_to(
+        self,
+        data: Dict[str, pd.DataFrame],
+        timestamp: datetime
+    ) -> pd.DataFrame:
+        """合并数据到指定时间点"""
+        combined = []
+        for symbol, df in data.items():
+            subset = df.loc[:timestamp].copy()
+            subset["symbol"] = symbol
+            combined.append(subset)
+        return pd.concat(combined) if combined else pd.DataFrame()
+
+    def _create_result(self, benchmark_data: pd.DataFrame = None) -> BacktestResult:
+        """创建回测结果"""
+        # 构建权益曲线DataFrame
         equity_df = pd.DataFrame(self.equity_curve, columns=["timestamp", "equity"])
         equity_df.set_index("timestamp", inplace=True)
         equity_df["returns"] = equity_df["equity"].pct_change()
-        return equity_df
+
+        # 添加基准
+        benchmark_returns = None
+        if self.benchmark_curve:
+            bench_df = pd.DataFrame(self.benchmark_curve, columns=["timestamp", "benchmark"])
+            bench_df.set_index("timestamp", inplace=True)
+
+            # 归一化基准到初始资金
+            initial_bench = bench_df["benchmark"].iloc[0]
+            bench_df["benchmark"] = bench_df["benchmark"] / initial_bench * float(self.initial_capital)
+
+            equity_df = equity_df.join(bench_df, how="left")
+            equity_df["benchmark_returns"] = equity_df["benchmark"].pct_change()
+            benchmark_returns = equity_df["benchmark_returns"]
+
+        # 计算绩效指标
+        metrics = calculate_metrics(
+            equity_df["returns"],
+            benchmark_returns=benchmark_returns,
+            trades=self.trades
+        )
+
+        return BacktestResult(
+            equity_curve=equity_df,
+            trades=self.trades,
+            metrics=metrics,
+            positions=dict(self.portfolio.positions)
+        )
