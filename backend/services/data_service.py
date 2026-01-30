@@ -377,3 +377,256 @@ def get_data_service() -> StockDataService:
         _data_service = StockDataService()
 
     return _data_service
+
+
+# ============================================================
+# DataService - Lightweight data service with adaptive rate limiting
+# ============================================================
+
+from .rate_limiter import AdaptiveRateLimiter
+
+
+class DataService:
+    """
+    Lightweight data service with adaptive rate limiting.
+
+    This is a simplified version for backtesting that uses
+    in-memory caching and the AdaptiveRateLimiter.
+
+    Features:
+    - Adaptive rate limiting (backs off on errors, speeds up on success)
+    - Simple in-memory cache
+    - Stock and index data fetching
+    """
+
+    def __init__(self, rate_limiter: AdaptiveRateLimiter = None):
+        """
+        Initialize DataService.
+
+        Args:
+            rate_limiter: Optional AdaptiveRateLimiter instance. If None, creates a new one.
+        """
+        self.rate_limiter = rate_limiter or AdaptiveRateLimiter()
+        self._cache: Dict[str, pd.DataFrame] = {}  # Simple in-memory cache
+
+    def get_data_for_backtest(
+        self,
+        symbols: List[str],
+        start_date: date,
+        end_date: date
+    ) -> Dict[str, pd.DataFrame]:
+        """
+        Get historical data for backtesting.
+
+        Args:
+            symbols: List of stock symbols
+            start_date: Start date
+            end_date: End date
+
+        Returns:
+            Dict mapping symbol to DataFrame with OHLCV data
+        """
+        result = {}
+        for symbol in symbols:
+            cache_key = f"{symbol}:{start_date}:{end_date}"
+
+            if cache_key in self._cache:
+                result[symbol] = self._cache[cache_key]
+                continue
+
+            data = self._fetch_stock_data(symbol, start_date, end_date)
+            if data is not None and not data.empty:
+                self._cache[cache_key] = data
+                result[symbol] = data
+
+        return result
+
+    def get_benchmark_data(
+        self,
+        symbol: str,
+        start_date: date,
+        end_date: date
+    ) -> Optional[pd.DataFrame]:
+        """
+        Get benchmark index data.
+
+        Args:
+            symbol: Index symbol (e.g., "000300" for CSI 300)
+            start_date: Start date
+            end_date: End date
+
+        Returns:
+            DataFrame with OHLCV data, or None on error
+        """
+        cache_key = f"benchmark:{symbol}:{start_date}:{end_date}"
+
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+
+        data = self._fetch_index_data(symbol, start_date, end_date)
+        if data is not None and not data.empty:
+            self._cache[cache_key] = data
+
+        return data
+
+    def _fetch_stock_data(
+        self,
+        symbol: str,
+        start_date: date,
+        end_date: date
+    ) -> Optional[pd.DataFrame]:
+        """
+        Fetch stock data from AKShare with rate limiting.
+
+        Args:
+            symbol: Stock symbol
+            start_date: Start date
+            end_date: End date
+
+        Returns:
+            DataFrame with OHLCV data, or None on error
+        """
+        try:
+            # Acquire rate limit token
+            if not self.rate_limiter.acquire(blocking=True, timeout=30):
+                logger.warning(f"Rate limit timeout for {symbol}")
+                return None
+
+            # Fetch data from AKShare
+            df = ak.stock_zh_a_hist(
+                symbol=symbol,
+                period="daily",
+                start_date=start_date.strftime("%Y%m%d"),
+                end_date=end_date.strftime("%Y%m%d"),
+                adjust="qfq"  # Forward-adjusted prices
+            )
+
+            self.rate_limiter.on_success()
+
+            # Process DataFrame
+            if df is not None and not df.empty:
+                df = self._process_stock_dataframe(df)
+
+            return df
+
+        except Exception as e:
+            logger.error(f"Failed to fetch {symbol}: {e}")
+            self.rate_limiter.on_fail()
+            return None
+
+    def _fetch_index_data(
+        self,
+        symbol: str,
+        start_date: date,
+        end_date: date
+    ) -> Optional[pd.DataFrame]:
+        """
+        Fetch index data from AKShare with rate limiting.
+
+        Args:
+            symbol: Index symbol
+            start_date: Start date
+            end_date: End date
+
+        Returns:
+            DataFrame with OHLCV data, or None on error
+        """
+        try:
+            if not self.rate_limiter.acquire(blocking=True, timeout=30):
+                logger.warning(f"Rate limit timeout for index {symbol}")
+                return None
+
+            df = ak.index_zh_a_hist(
+                symbol=symbol,
+                period="daily",
+                start_date=start_date.strftime("%Y%m%d"),
+                end_date=end_date.strftime("%Y%m%d")
+            )
+
+            self.rate_limiter.on_success()
+
+            if df is not None and not df.empty:
+                df = self._process_index_dataframe(df)
+
+            return df
+
+        except Exception as e:
+            logger.error(f"Failed to fetch index {symbol}: {e}")
+            self.rate_limiter.on_fail()
+            return None
+
+    def _process_stock_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Process stock data DataFrame to standard format.
+
+        Args:
+            df: Raw DataFrame from AKShare
+
+        Returns:
+            Processed DataFrame with standard columns and DatetimeIndex
+        """
+        # Map Chinese column names to English
+        column_map = {
+            "日期": "date",
+            "开盘": "open",
+            "最高": "high",
+            "最低": "low",
+            "收盘": "close",
+            "成交量": "volume",
+            "成交额": "amount"
+        }
+
+        df = df.rename(columns=column_map)
+        df["date"] = pd.to_datetime(df["date"])
+        df = df.set_index("date")
+
+        # Ensure required columns exist
+        required = ["open", "high", "low", "close", "volume"]
+        for col in required:
+            if col not in df.columns:
+                raise ValueError(f"Missing required column: {col}")
+
+        return df[required]
+
+    def _process_index_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Process index data DataFrame to standard format.
+
+        Args:
+            df: Raw DataFrame from AKShare
+
+        Returns:
+            Processed DataFrame with standard columns and DatetimeIndex
+        """
+        column_map = {
+            "日期": "date",
+            "开盘": "open",
+            "最高": "high",
+            "最低": "low",
+            "收盘": "close",
+            "成交量": "volume"
+        }
+
+        df = df.rename(columns=column_map)
+        df["date"] = pd.to_datetime(df["date"])
+        df = df.set_index("date")
+
+        return df[["open", "high", "low", "close", "volume"]]
+
+    def clear_cache(self):
+        """Clear the in-memory cache."""
+        self._cache.clear()
+
+
+# Global lightweight data service instance
+_lightweight_data_service: Optional[DataService] = None
+
+
+def get_lightweight_data_service() -> DataService:
+    """Get the global lightweight DataService instance."""
+    global _lightweight_data_service
+
+    if _lightweight_data_service is None:
+        _lightweight_data_service = DataService()
+
+    return _lightweight_data_service
