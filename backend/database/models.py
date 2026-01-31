@@ -2,6 +2,7 @@
 SQLAlchemy database models for Strategy Supermarket.
 """
 from sqlalchemy import Column, String, Integer, Float, DateTime, Boolean, Text, Date, Index
+from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 
@@ -38,7 +39,7 @@ class StrategyBacktest(Base):
     symbols = Column(String(500), comment="交易股票列表(JSON)")
     start_date = Column(Date, nullable=False, comment="回测开始日期")
     end_date = Column(Date, nullable=False, comment="回测结束日期")
-    equity_curve = Column(Text, comment="权益曲线数据(JSON)")
+    equity_curve = Column(LONGTEXT, comment="权益曲线数据(JSON)")
     metrics = Column(Text, nullable=False, comment="策略指标(JSON)")
     trades = Column(Text, comment="交易记录(JSON)")
     last_updated = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="缓存时间")

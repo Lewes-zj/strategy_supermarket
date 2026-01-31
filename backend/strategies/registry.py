@@ -14,6 +14,7 @@ from strategies.sector_rotation import (
     RelativeStrengthSectorRotation,
     MomentumSectorRotation
 )
+from strategies.dragon_strategy import DragonLeaderStrategy
 
 
 class StrategyInfo:
@@ -108,6 +109,24 @@ STRATEGY_REGISTRY: Dict[str, StrategyInfo] = {
             "top_n_sectors": 3,
             "rebalance_threshold": 0.10,
             "stop_loss_pct": 0.05
+        }
+    ),
+
+    "dragon_leader": StrategyInfo(
+        strategy_id="dragon_leader",
+        name="龙厂策略",
+        description="连板龙头打板策略，在市场情绪好时买入连板数最高的龙头股。适用于短线激进交易。",
+        strategy_class=DragonLeaderStrategy,
+        tags=["打板", "短线", "龙头股", "高风险"],
+        default_symbols=[],  # 动态从涨停股池选择
+        parameters={
+            "max_hold_num": 1,
+            "min_board_count": 3,
+            "min_non_yz_board": 2,
+            "stop_loss_pct": 0.05,
+            "market_risk_threshold": 15,
+            "cooldown_days": 7,
+            "max_backtest_days": 30  # 限制回测天数（涨停池API只支持30天）
         }
     ),
 }

@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional, Dict, Any
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import pandas as pd
 import json
 from decimal import Decimal
@@ -154,8 +154,15 @@ def run_backtest(strategy_id: str, symbols: List[str] = None, use_real_data: boo
         symbols = strategy_info.default_symbols
 
     # Check cache in database
-    # Use 10 years of data
-    start_dt = (datetime.now() - pd.Timedelta(days=365*10)).date()
+    # Check if strategy has a max_backtest_days limit (e.g., dragon_leader)
+    max_backtest_days = strategy_info.parameters.get("max_backtest_days")
+    if max_backtest_days:
+        # Use strategy-specific backtest period
+        start_dt = (datetime.now() - timedelta(days=max_backtest_days)).date()
+        logger.info(f"Strategy {strategy_id} limited to {max_backtest_days} days backtest")
+    else:
+        # Default: 10 years of data
+        start_dt = (datetime.now() - pd.Timedelta(days=365*10)).date()
     end_dt = datetime.now().date()
 
     with get_session() as session:
@@ -198,44 +205,101 @@ def run_backtest(strategy_id: str, symbols: List[str] = None, use_real_data: boo
     # Load Data from database (NO MOCK DATA FALLBACK)
     data_service = get_data_service()
 
-    # Get data for first symbol only (backtester is single-symbol)
-    symbol = symbols[0] if symbols else "DEMO"
-    data = data_service.get_cached_data([symbol], start_dt, end_dt)
+    # Special handling for dragon_leader strategy
+    if strategy_id == "dragon_leader":
+        # Dragon strategy needs to preload ZT pool data first
+        logger.info("Preparing data for dragon_leader strategy...")
+        try:
+            prep_result = strategy.prepare_backtest_data(start_dt, end_dt)
+            logger.info(f"Dragon strategy data prep: {prep_result}")
 
-    if data.empty:
-        # No data available - return empty result (not mock data)
-        logger.warning(f"No data available for {symbol}")
-        # Return empty dataframe with proper structure
-        empty_df = pd.DataFrame({
-            'equity': [100000.0],
-            'returns': [0.0]
-        })
-        empty_df.index = pd.to_datetime([datetime.now()])
-        return {
-            "equity": empty_df,
-            "metrics": {
-                "sharpe": 0, "calmar": 0, "pl_ratio": 0,
-                "avg_hold_days": 0, "strategy_return": 0,
-                "sortino": 0, "alpha": 0, "beta": 1.0,
-                "benchmark_return": 0, "win_count": 0,
-                "loss_count": 0, "volatility": 0,
-                "excess_max_drawdown": 0, "ytd_return": 0,
-                "mtd_return": 0, "consecutive_wins": 0,
-                "drawdown_period": "N/A",
-                "cagr": 0, "max_drawdown": 0,
-                "win_rate": 0, "total_return": 0
-            },
-            "trades": [],
-            "backtester": backtester
-        }
+            # Get all symbols from ZT pool
+            from services.zt_pool_service import get_zt_pool_service
+            zt_service = get_zt_pool_service()
+            symbols = list(zt_service.extract_all_symbols())
 
-    # Filter to single symbol and ensure format
-    if "symbol" in data.columns:
-        data = data[data["symbol"] == symbol].copy()
+            if not symbols:
+                logger.warning("No symbols found in ZT pool")
+                symbols = ["000001"]  # Fallback
+        except Exception as e:
+            logger.error(f"Failed to prepare dragon strategy data: {e}")
+            symbols = ["000001"]  # Fallback
 
-    # Convert to dict format for new EventDrivenBacktester
-    # The new backtester expects Dict[str, pd.DataFrame]
-    data_dict = {symbol: data}
+    # Get data for symbol(s)
+    # For dragon_leader, load all candidate symbols; for others, just first symbol
+    if strategy_id == "dragon_leader" and len(symbols) > 1:
+        # Load data for multiple symbols
+        data = data_service.get_cached_data(symbols[:100], start_dt, end_dt)  # Limit to 100 symbols
+        if data.empty:
+            logger.warning(f"No data available for dragon strategy symbols")
+            # Return empty result
+            empty_df = pd.DataFrame({
+                'equity': [100000.0],
+                'returns': [0.0]
+            })
+            empty_df.index = pd.to_datetime([datetime.now()])
+            return {
+                "equity": empty_df,
+                "metrics": {
+                    "sharpe": 0, "calmar": 0, "pl_ratio": 0,
+                    "avg_hold_days": 0, "strategy_return": 0,
+                    "sortino": 0, "alpha": 0, "beta": 1.0,
+                    "benchmark_return": 0, "win_count": 0,
+                    "loss_count": 0, "volatility": 0,
+                    "excess_max_drawdown": 0, "ytd_return": 0,
+                    "mtd_return": 0, "consecutive_wins": 0,
+                    "drawdown_period": "N/A",
+                    "cagr": 0, "max_drawdown": 0,
+                    "win_rate": 0, "total_return": 0
+                },
+                "trades": [],
+                "backtester": backtester
+            }
+
+        # Convert to dict format for EventDrivenBacktester
+        data_dict = {}
+        for sym in data['symbol'].unique():
+            sym_data = data[data['symbol'] == sym].copy()
+            sym_data = sym_data.drop(columns=['symbol'], errors='ignore')
+            data_dict[sym] = sym_data
+    else:
+        # Single symbol mode (original behavior)
+        symbol = symbols[0] if symbols else "DEMO"
+        data = data_service.get_cached_data([symbol], start_dt, end_dt)
+
+        if data.empty:
+            # No data available - return empty result (not mock data)
+            logger.warning(f"No data available for {symbol}")
+            # Return empty dataframe with proper structure
+            empty_df = pd.DataFrame({
+                'equity': [100000.0],
+                'returns': [0.0]
+            })
+            empty_df.index = pd.to_datetime([datetime.now()])
+            return {
+                "equity": empty_df,
+                "metrics": {
+                    "sharpe": 0, "calmar": 0, "pl_ratio": 0,
+                    "avg_hold_days": 0, "strategy_return": 0,
+                    "sortino": 0, "alpha": 0, "beta": 1.0,
+                    "benchmark_return": 0, "win_count": 0,
+                    "loss_count": 0, "volatility": 0,
+                    "excess_max_drawdown": 0, "ytd_return": 0,
+                    "mtd_return": 0, "consecutive_wins": 0,
+                    "drawdown_period": "N/A",
+                    "cagr": 0, "max_drawdown": 0,
+                    "win_rate": 0, "total_return": 0
+                },
+                "trades": [],
+                "backtester": backtester
+            }
+
+        # Filter to single symbol and ensure format
+        if "symbol" in data.columns:
+            data = data[data["symbol"] == symbol].copy()
+
+        # Convert to dict format for new EventDrivenBacktester
+        data_dict = {symbol: data}
 
     # Run backtest
     result = backtester.run(data_dict)
@@ -454,6 +518,7 @@ def get_strategies(
         # Build strategy list
         strategy_list = get_all_strategies()
         results = []
+        data_service = get_data_service()
 
         for info in strategy_list:
             # Run backtest to get metrics (use cached results when possible)
@@ -469,9 +534,50 @@ def get_strategies(
                 signal_service = get_signal_service()
                 has_recent_signal = signal_service.is_signal_recent(info.strategy_id, minutes=15)
 
-                # Calculate additional metrics
-                total_trades = len(equity_df) if not equity_df.empty else 0
-                avg_hold_days = 17.8  # Default, would be calculated from actual trades
+                # Get actual trade statistics from backtest result
+                backtester = res.get("backtester")
+                trades = backtester.trades if backtester and hasattr(backtester, 'trades') else []
+                total_trades = len(trades)
+
+                # Calculate average hold days from trades
+                if len(trades) >= 2:
+                    # Calculate hold periods between buy and sell
+                    buy_times = {}
+                    hold_days_list = []
+                    for trade in trades:
+                        symbol = trade.order.symbol
+                        if trade.order.side.value == 'buy':
+                            buy_times[symbol] = trade.timestamp
+                        elif trade.order.side.value == 'sell' and symbol in buy_times:
+                            hold_days = (trade.timestamp - buy_times[symbol]).days
+                            if hold_days > 0:
+                                hold_days_list.append(hold_days)
+                            del buy_times[symbol]
+                    avg_hold_days = sum(hold_days_list) / len(hold_days_list) if hold_days_list else 0
+                else:
+                    avg_hold_days = 0
+
+                # Get win count from metrics
+                win_count = metrics.get("win_count", 0)
+
+                # Get recent captures (last 3 unique symbols traded)
+                recent_captures = []
+                seen_symbols = set()
+                for trade in reversed(trades):
+                    symbol = trade.order.symbol
+                    if symbol not in seen_symbols and len(recent_captures) < 3:
+                        # Try to get stock name from stock pool
+                        stock_name = symbol  # Default to symbol
+                        try:
+                            stock_pool = data_service.stock_pool_repo.get_stock_pool()
+                            for stock in stock_pool:
+                                if stock['symbol'] == symbol:
+                                    stock_name = stock.get('name', symbol)
+                                    break
+                        except:
+                            pass
+                        recent_captures.append({"symbol": symbol, "name": stock_name})
+                        seen_symbols.add(symbol)
 
                 result_item = {
                     "id": info.strategy_id,
@@ -488,8 +594,10 @@ def get_strategies(
                         "time": "今天 09:30" if has_recent_signal else None
                     },
                     "total_trades": total_trades,
-                    "avg_hold_days": avg_hold_days,
-                    "is_active": info.is_active
+                    "avg_hold_days": round(avg_hold_days, 1),
+                    "is_active": info.is_active,
+                    "win_count": win_count,
+                    "recent_captures": recent_captures
                 }
 
                 results.append(result_item)

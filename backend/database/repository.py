@@ -36,9 +36,12 @@ class StockDataRepository:
             insert_count = 0
             update_count = 0
             for _, row in df.iterrows():
+                # Convert pandas Timestamp to Python date for proper comparison
+                trade_date_value = row['date'].date() if hasattr(row['date'], 'date') else row['date']
+
                 # Check if record exists
                 existing = session.query(StockDaily).filter(
-                    and_(StockDaily.symbol == symbol, StockDaily.trade_date == row['date'])
+                    and_(StockDaily.symbol == symbol, StockDaily.trade_date == trade_date_value)
                 ).first()
 
                 if existing:
@@ -55,7 +58,7 @@ class StockDataRepository:
                     # Insert new record
                     record = StockDaily(
                         symbol=symbol,
-                        trade_date=row['date'],
+                        trade_date=trade_date_value,
                         open=row['open'],
                         high=row['high'],
                         low=row['low'],
