@@ -117,13 +117,23 @@ const StrategyDetail: React.FC = () => {
                         <div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
                                 <h1 style={{ fontSize: '32px' }}>{strategyInfo.name}</h1>
-                                <span style={{
-                                    border: '1px solid var(--color-down-green)', color: 'var(--color-down-green)',
-                                    padding: '2px 8px', borderRadius: '4px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px'
-                                }}>
-                                    <div style={{ width: '6px', height: '6px', background: 'currentColor', borderRadius: '50%' }}></div>
-                                    实盘运行中
-                                </span>
+                                {strategyInfo.is_active !== false ? (
+                                    <span style={{
+                                        border: '1px solid var(--color-down-green)', color: 'var(--color-down-green)',
+                                        padding: '2px 8px', borderRadius: '4px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px'
+                                    }}>
+                                        <div style={{ width: '6px', height: '6px', background: 'currentColor', borderRadius: '50%' }}></div>
+                                        实盘运行中
+                                    </span>
+                                ) : (
+                                    <span style={{
+                                        border: '1px solid var(--text-secondary)', color: 'var(--text-secondary)',
+                                        padding: '2px 8px', borderRadius: '4px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px'
+                                    }}>
+                                        <div style={{ width: '6px', height: '6px', background: 'currentColor', borderRadius: '50%' }}></div>
+                                        已停止
+                                    </span>
+                                )}
                             </div>
                             <p style={{ color: 'var(--text-secondary)' }}>
                                 {strategyInfo.description} • {strategyInfo.tags.map(tag => `[${tag}]`).join(' ')}

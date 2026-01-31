@@ -14,6 +14,11 @@ const StrategyCard: React.FC<StrategyCardProps> = ({ strategy }) => {
     // Transform sparkline array to object array for Recharts
     const chartData = strategy.sparkline.map((val, i) => ({ i, val }));
 
+    // Format recent captures for display
+    const recentCapturesText = strategy.recent_captures && strategy.recent_captures.length > 0
+        ? strategy.recent_captures.map(c => `${c.name}(${c.symbol})`).join('、')
+        : '暂无最近交易';
+
     return (
         <div
             onClick={() => navigate(`/strategy/${strategy.id}`)}
@@ -49,12 +54,22 @@ const StrategyCard: React.FC<StrategyCardProps> = ({ strategy }) => {
                             </p>
                         )}
                     </div>
-                    <span style={{
-                        color: 'var(--color-down-green)', fontSize: '12px',
-                        display: 'flex', alignItems: 'center', gap: '4px'
-                    }}>
-                        ● 实盘运行中
-                    </span>
+                    {strategy.is_active !== false && (
+                        <span style={{
+                            color: 'var(--color-down-green)', fontSize: '12px',
+                            display: 'flex', alignItems: 'center', gap: '4px'
+                        }}>
+                            ● 实盘运行中
+                        </span>
+                    )}
+                    {strategy.is_active === false && (
+                        <span style={{
+                            color: 'var(--text-secondary)', fontSize: '12px',
+                            display: 'flex', alignItems: 'center', gap: '4px'
+                        }}>
+                            ● 已停止
+                        </span>
+                    )}
                     {strategy.tags.map(tag => (
                         <span key={tag} style={{
                             fontSize: '12px', backgroundColor: 'rgba(255,255,255,0.1)',
@@ -91,8 +106,8 @@ const StrategyCard: React.FC<StrategyCardProps> = ({ strategy }) => {
             <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.5fr 1fr', gap: '24px', alignItems: 'center' }}>
                 {/* Left: CAGR */}
                 <div>
-                    <div style={{ fontSize: '36px', fontWeight: 'bold', color: 'var(--color-up-red)', fontFamily: 'DIN Condensed, sans-serif' }}>
-                        +{(strategy.cagr * 100).toFixed(1)}%
+                    <div style={{ fontSize: '36px', fontWeight: 'bold', color: strategy.cagr >= 0 ? 'var(--color-up-red)' : 'var(--color-down-green)', fontFamily: 'DIN Condensed, sans-serif' }}>
+                        {strategy.cagr >= 0 ? '+' : ''}{(strategy.cagr * 100).toFixed(1)}%
                     </div>
                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>年化收益率 (CAGR)</div>
                 </div>
@@ -136,7 +151,11 @@ const StrategyCard: React.FC<StrategyCardProps> = ({ strategy }) => {
                                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>夏普比率</div>
                             </div>
                             <div>
-                                <div style={{ color: 'white' }}>17.8天</div>
+                                <div style={{ color: 'white' }}>
+                                    {strategy.avg_hold_days !== undefined && strategy.avg_hold_days > 0
+                                        ? `${strategy.avg_hold_days.toFixed(1)}天`
+                                        : '—'}
+                                </div>
                                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>平均持仓</div>
                             </div>
                         </>
@@ -144,11 +163,17 @@ const StrategyCard: React.FC<StrategyCardProps> = ({ strategy }) => {
                     {strategy.sharpe === undefined && (
                         <>
                             <div>
-                                <div style={{ color: 'white' }}>17.8天</div>
+                                <div style={{ color: 'white' }}>
+                                    {strategy.avg_hold_days !== undefined && strategy.avg_hold_days > 0
+                                        ? `${strategy.avg_hold_days.toFixed(1)}天`
+                                        : '—'}
+                                </div>
                                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>平均持仓</div>
                             </div>
                             <div>
-                                <div style={{ color: 'white' }}>45笔</div>
+                                <div style={{ color: 'white' }}>
+                                    {strategy.win_count !== undefined ? `${strategy.win_count}笔` : '—'}
+                                </div>
                                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>盈利次数</div>
                             </div>
                         </>
@@ -163,7 +188,7 @@ const StrategyCard: React.FC<StrategyCardProps> = ({ strategy }) => {
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
                     <Target size={14} className="text-blue" />
-                    <span>最近捕获：大洋生物(003017)、海象新材(003011)</span>
+                    <span>最近捕获：{recentCapturesText}</span>
                 </div>
                 <button style={{
                     background: 'transparent', border: '1px solid var(--text-secondary)',

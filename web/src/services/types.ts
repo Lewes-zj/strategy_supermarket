@@ -12,6 +12,12 @@ export interface StrategyListItem {
         has_recent: boolean;
         time: string | null;
     };
+    // Additional fields from backend
+    is_active?: boolean;
+    total_trades?: number;
+    avg_hold_days?: number;
+    win_count?: number;
+    recent_captures?: Array<{ symbol: string; name: string }>;
 }
 
 export interface StrategyListParams {
@@ -26,6 +32,20 @@ export interface Metrics {
     max_drawdown: number;
     win_rate: number;
     total_return: number;
+    // Additional metrics from backend
+    calmar?: number;
+    pl_ratio?: number;
+    avg_hold_days?: number;
+    sortino?: number;
+    alpha?: number;
+    beta?: number;
+    volatility?: number;
+    win_count?: number;
+    loss_count?: number;
+    ytd_return?: number;
+    mtd_return?: number;
+    consecutive_wins?: number;
+    drawdown_period?: string;
 }
 
 export interface EquityPoint {
