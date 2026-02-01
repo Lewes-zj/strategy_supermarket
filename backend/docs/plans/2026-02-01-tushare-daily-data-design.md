@@ -94,6 +94,9 @@ python scripts/fetch_tushare_daily.py --resume
 
 # 强制重新开始（忽略进度文件）
 python scripts/fetch_tushare_daily.py --start 20200101 --force-new
+
+# 重新拉取上次失败的股票
+python scripts/fetch_tushare_daily.py --retry-failed
 ```
 
 ## 频率控制
@@ -129,6 +132,68 @@ python scripts/fetch_tushare_daily.py --start 20200101 --force-new
 2. 网络超时 → 指数退避重试（1s, 2s, 4s）
 3. 股票不存在/退市 → 记录到failed_symbols，继续下一个
 4. 数据库写入失败 → 回滚当前批次，记录错误，继续
+
+## 失败股票重试机制
+
+### 1. 即时重试（单次任务内）
+
+每只股票拉取失败后，立即进行指数退避重试：
+
+```python
+MAX_RETRY = 3
+RETRY_DELAYS = [1, 2, 4]  # 指数退避：1秒、2秒、4秒
+
+for attempt in range(MAX_RETRY):
+    try:
+        data = ts.daily(ts_code=code, start_date=start, end_date=end)
+        break  # 成功则跳出
+    except Exception as e:
+        if attempt < MAX_RETRY - 1:
+            time.sleep(RETRY_DELAYS[attempt])
+        else:
+            failed_symbols[code] = str(e)  # 最终失败，记录原因
+```
+
+### 2. 任务级重试（针对失败股票）
+
+```bash
+# 方式1：使用自动生成的失败列表文件
+python scripts/fetch_tushare_daily.py --symbols-file data/failed_symbols_20260201.txt --start 20200101
+
+# 方式2：使用 --retry-failed 参数自动读取最近失败列表
+python scripts/fetch_tushare_daily.py --retry-failed
+```
+
+### 3. 进度文件中的失败记录格式
+
+```json
+{
+    "failed_symbols": {
+        "000003.SZ": {
+            "error": "API error: 积分不足",
+            "attempts": 3,
+            "last_attempt": "2026-02-01 10:35:00"
+        },
+        "000005.SZ": {
+            "error": "网络超时",
+            "attempts": 3,
+            "last_attempt": "2026-02-01 10:36:00"
+        }
+    }
+}
+```
+
+### 4. 任务完成后的输出
+
+```
+拉取完成！
+  - 成功: 4950 只
+  - 失败: 50 只
+
+失败股票已保存到: data/failed_symbols_20260201.txt
+重新拉取失败股票命令:
+  python scripts/fetch_tushare_daily.py --symbols-file data/failed_symbols_20260201.txt --start 20200101
+```
 
 ## 依赖项
 
