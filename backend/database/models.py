@@ -154,3 +154,28 @@ class StrategyPosition(Base):
         Index("idx_strategy_position", "strategy_id", "symbol"),
         {"mysql_charset": "utf8mb4", "mysql_collate": "utf8mb4_unicode_ci"}
     )
+
+
+class TushareStockDaily(Base):
+    """Tushare日线数据（分区表）"""
+    __tablename__ = "tushare_stock_daily"
+
+    ts_code = Column(String(10), primary_key=True, comment="tushare股票代码")
+    trade_date = Column(Date, primary_key=True, comment="交易日期")
+    open = Column(Float, comment="开盘价")
+    high = Column(Float, comment="最高价")
+    low = Column(Float, comment="最低价")
+    close = Column(Float, comment="收盘价")
+    pre_close = Column(Float, comment="昨收价")
+    change_amt = Column(Float, comment="涨跌额")
+    pct_chg = Column(Float, comment="涨跌幅(%)")
+    vol = Column(Float, comment="成交量(手)")
+    amount = Column(Float, comment="成交额(千元)")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+    __table_args__ = (
+        Index("idx_tushare_trade_date", "trade_date"),
+        Index("idx_tushare_ts_code", "ts_code"),
+        {"mysql_charset": "utf8mb4", "mysql_collate": "utf8mb4_unicode_ci"}
+    )
