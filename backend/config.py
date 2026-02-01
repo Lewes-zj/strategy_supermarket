@@ -51,6 +51,12 @@ class Config:
     REDIS_DB = int(os.getenv("REDIS_DB", "0"))
     REDIS_ENABLED = os.getenv("REDIS_ENABLED", "true").lower() == "true"
 
+    # Tushare Settings
+    TUSHARE_TOKEN = os.getenv("TUSHARE_TOKEN", "")
+    TUSHARE_RATE_LIMIT = float(os.getenv("TUSHARE_RATE_LIMIT", "6.0"))
+    TUSHARE_RETRY_TIMES = int(os.getenv("TUSHARE_RETRY_TIMES", "3"))
+    TUSHARE_RETRY_DELAY = float(os.getenv("TUSHARE_RETRY_DELAY", "1.0"))
+
     @classmethod
     def validate(cls):
         """Validate required configuration."""
