@@ -131,22 +131,28 @@ class TushareService:
         """保存数据到数据库"""
         if df is None or df.empty:
             return 0
-        
+
+        def clean_value(val):
+            """Convert NaN to None for MySQL compatibility"""
+            if pd.isna(val):
+                return None
+            return val
+
         records = df.to_dict('records')
         with get_session() as session:
             for record in records:
                 data = {
                     'ts_code': record['ts_code'],
                     'trade_date': datetime.strptime(record['trade_date'], '%Y%m%d').date(),
-                    'open': record.get('open'),
-                    'high': record.get('high'),
-                    'low': record.get('low'),
-                    'close': record.get('close'),
-                    'pre_close': record.get('pre_close'),
-                    'change_amt': record.get('change'),
-                    'pct_chg': record.get('pct_chg'),
-                    'vol': record.get('vol'),
-                    'amount': record.get('amount'),
+                    'open': clean_value(record.get('open')),
+                    'high': clean_value(record.get('high')),
+                    'low': clean_value(record.get('low')),
+                    'close': clean_value(record.get('close')),
+                    'pre_close': clean_value(record.get('pre_close')),
+                    'change_amt': clean_value(record.get('change')),
+                    'pct_chg': clean_value(record.get('pct_chg')),
+                    'vol': clean_value(record.get('vol')),
+                    'amount': clean_value(record.get('amount')),
                 }
                 
                 stmt = text("""
