@@ -58,11 +58,19 @@ export interface Transaction {
     date: string;
     time: string;
     symbol: string;
+    sector?: string;
     side: string;
     price: number | null;
     pnl: number;
     pnl_percent?: number;
     is_encrypted: boolean;
+    source?: 'backtest' | 'live';
+}
+
+export interface TransactionsResponse {
+    transactions: Transaction[];
+    total: number;
+    page: number;
 }
 
 export interface Holding {

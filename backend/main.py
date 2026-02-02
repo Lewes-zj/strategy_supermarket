@@ -1042,78 +1042,181 @@ def get_equity_curve(id: str, year: Optional[int] = None):
 
 
 @app.get("/api/strategies/{id}/transactions")
-def get_transactions(id: str, is_subscribed: bool = False, year: Optional[int] = None):
-    """Get transaction history for a strategy with encryption for non-subscribers."""
+def get_transactions(
+    id: str,
+    is_subscribed: bool = False,
+    year: Optional[int] = None,
+    page: int = 1,
+    page_size: int = 50
+):
+    """Get transaction history from database with pagination."""
+    from database.models import StrategyTrade
+    from database.connection import get_db_session
+    from sqlalchemy import extract
+
     try:
-        # Get stock pool for sector mapping
+        db = get_db_session()
+
+        # 获取行业映射
         from database.repository import StockPoolRepository
         stock_pool_repo = StockPoolRepository()
         stock_pool = stock_pool_repo.get_stock_pool()
         sector_map = {s['symbol']: s.get('sector', '其他') for s in stock_pool}
 
-        # Run backtest to get trades
+        # 构建查询
+        query = db.query(StrategyTrade).filter(StrategyTrade.strategy_id == id)
+
+        if year:
+            query = query.filter(extract('year', StrategyTrade.trade_date) == year)
+
+        # 总数
+        total = query.count()
+
+        # 如果数据库没有数据，回退到回测获取
+        if total == 0:
+            return _get_transactions_from_backtest(id, is_subscribed, year, sector_map)
+
+        # 分页查询
+        trades = query.order_by(
+            StrategyTrade.trade_date.desc(),
+            StrategyTrade.id.desc()
+        ).offset((page - 1) * page_size).limit(page_size).all()
+
+        # 格式化响应
+        api_trades = []
+        for i, trade in enumerate(trades):
+            is_encrypted = (i < 3) and (not is_subscribed)
+
+            trade_data = {
+                "date": trade.trade_date.isoformat(),
+                "time": trade.trade_time or "",
+                "symbol": trade.symbol if not is_encrypted else (trade.sector or "其他"),
+                "sector": trade.sector,
+                "side": trade.side,
+                "price": trade.price if not is_encrypted else None,
+                "pnl": trade.pnl_pct or 0,
+                "is_encrypted": is_encrypted
+            }
+
+            if is_encrypted:
+                trade_data["pnl_percent"] = 0.05 + (i * 0.02)
+
+            api_trades.append(trade_data)
+
+        return {"transactions": api_trades, "total": total, "page": page}
+
+    except Exception as e:
+        logger.error(f"Error getting transactions: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"transactions": [], "total": 0, "page": 1}
+
+
+def _get_transactions_from_backtest(id: str, is_subscribed: bool, year: Optional[int], sector_map: dict):
+    """回退方法：从回测结果获取交易记录"""
+    try:
         res = run_backtest(id, use_real_data=True)
         trades = res["backtester"].trades
 
-        # Filter by year if specified
         if year:
             trades = [t for t in trades if t.timestamp.year == year]
 
         api_trades = []
-
         for i, trade in enumerate(reversed(trades)):
-            # Determine if this trade should be encrypted (recent trades = encrypted)
-            # For demo: last 3 trades are considered "active"
             is_encrypted = (i < 3) and (not is_subscribed)
-
             symbol = trade.order.symbol
             sector = sector_map.get(symbol, '其他')
 
             trade_data = {
                 "date": trade.timestamp.strftime("%Y-%m-%d"),
                 "time": trade.timestamp.strftime("%H:%M:%S"),
-                "symbol": symbol,
+                "symbol": symbol if not is_encrypted else sector,
+                "sector": sector,
                 "side": trade.order.side.value,
-                "price": float(trade.fill_price),
-                "quantity": float(trade.fill_quantity),
-                "pnl": float(trade.fill_quantity * trade.fill_price * 0.01),  # Simplified P&L
+                "price": float(trade.fill_price) if not is_encrypted else None,
+                "pnl": float(trade.fill_quantity * trade.fill_price * 0.01),
                 "is_encrypted": is_encrypted
             }
 
             if is_encrypted:
-                # Mask data for non-subscribers (PRD requirement)
-                trade_data["symbol"] = sector  # Show sector instead of symbol
-                trade_data["original_symbol"] = None
-                trade_data["price"] = None  # Hide price
-                trade_data["quantity"] = None  # Hide quantity
-                # Blur time to hour range
-                hour = trade.timestamp.hour
-                time_range = f"{hour:02d}:00-{hour+1:02d}"
-                trade_data["time"] = time_range
-                # Show floating P&L as percentage
-                trade_data["floating_pnl"] = 0.05 + (i * 0.02)  # Demo value
-                trade_data["pnl_percent"] = trade_data["floating_pnl"]
-            else:
-                # Full data for subscribers or closed trades
-                trade_data["sector"] = sector
-                trade_data["original_symbol"] = symbol
-                trade_data["floating_pnl"] = None
-                trade_data["pnl_percent"] = trade_data["pnl"] * 100
+                trade_data["pnl_percent"] = 0.05 + (i * 0.02)
 
             api_trades.append(trade_data)
 
-        return api_trades
-
+        return {"transactions": api_trades, "total": len(api_trades), "page": 1}
     except Exception as e:
-        logger.error(f"Error getting transactions: {e}")
-        return []
+        logger.error(f"Error in backtest fallback: {e}")
+        return {"transactions": [], "total": 0, "page": 1}
 
 
 @app.get("/api/strategies/{id}/holdings")
 def get_holdings(id: str, is_subscribed: bool = False):
-    """Get current holdings for a strategy with masking for non-subscribers."""
+    """Get current holdings from database."""
+    from database.models import StrategyDailySnapshot
+    from database.connection import get_db_session
+    from sqlalchemy import func
+
     try:
-        # Try to get from database first (strategy_positions table)
+        db = get_db_session()
+
+        # 获取最新日期
+        latest_date = db.query(func.max(StrategyDailySnapshot.snapshot_date)).filter(
+            StrategyDailySnapshot.strategy_id == id
+        ).scalar()
+
+        # 如果数据库没有数据，回退到原有逻辑
+        if not latest_date:
+            return _get_holdings_fallback(id, is_subscribed)
+
+        # 查询当日持仓
+        holdings = db.query(StrategyDailySnapshot).filter(
+            StrategyDailySnapshot.strategy_id == id,
+            StrategyDailySnapshot.snapshot_date == latest_date
+        ).all()
+
+        # 计算总浮盈
+        total_pnl_pct = sum(
+            h.weight * (h.floating_pnl_pct or 0) for h in holdings
+        )
+
+        # 格式化响应
+        response_list = []
+        for h in holdings:
+            item = {
+                "sector": h.sector or "其他",
+                "direction": h.direction or "Long",
+                "days_held": h.days_held,
+                "weight": f"{h.weight * 100:.0f}%",
+                "pnl_pct": (h.floating_pnl_pct or 0) * 100
+            }
+
+            if is_subscribed:
+                item["symbol"] = h.symbol
+                item["name"] = h.name or h.symbol
+                item["current_price"] = h.current_price
+            else:
+                item["symbol"] = "HIDDEN"
+                item["name"] = "HIDDEN"
+                item["current_price"] = None
+
+            response_list.append(item)
+
+        return {
+            "holdings": response_list,
+            "total_pnl_pct": total_pnl_pct * 100,
+            "position_count": len(holdings)
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting holdings: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"holdings": [], "total_pnl_pct": 0, "position_count": 0}
+
+
+def _get_holdings_fallback(id: str, is_subscribed: bool):
+    """回退方法：从 StrategyPosition 表或回测结果获取持仓"""
+    try:
         from database.repository import PositionRepository
         from database.models import StrategyPosition
 
@@ -1122,25 +1225,20 @@ def get_holdings(id: str, is_subscribed: bool = False):
 
         holdings = []
         total_pnl = 0.0
-        total_val = 100000.0  # Initial capital
 
         if db_positions:
-            # Use database positions
             for pos in db_positions:
                 holdings.append({
                     "symbol": pos.symbol,
-                    "name": pos.symbol,  # Will be replaced by actual name if available
+                    "name": pos.symbol,
                     "sector": pos.sector or "其他",
                     "direction": pos.direction or "Long",
                     "days_held": pos.days_held,
                     "weight": f"{pos.weight}%" if pos.weight else "0%",
-                    "entry_price": float(pos.entry_price) if pos.entry_price else 0,
-                    "current_price": float(pos.current_price) if pos.current_price else 0,
-                    "pnl": float(pos.floating_pnl) / 100 if pos.floating_pnl else 0  # Convert from % to decimal
+                    "pnl": float(pos.floating_pnl) / 100 if pos.floating_pnl else 0
                 })
                 total_pnl += float(pos.floating_pnl) if pos.floating_pnl else 0
         else:
-            # Fallback to backtest data
             from database.repository import StockPoolRepository
             stock_pool_repo = StockPoolRepository()
             stock_pool = stock_pool_repo.get_stock_pool()
@@ -1153,10 +1251,8 @@ def get_holdings(id: str, is_subscribed: bool = False):
                 if position.quantity > 0:
                     entry_price = float(position.avg_cost) if position.avg_cost else 0
                     sector = sector_map.get(symbol, '其他')
-
                     current_price = entry_price * (1 + 0.02 * (hash(symbol) % 10 - 5))
-                    current_value = position.quantity * current_price
-                    pnl = current_value - (position.quantity * entry_price)
+                    pnl = (current_price - entry_price) / entry_price if entry_price > 0 else 0
 
                     holdings.append({
                         "symbol": symbol,
@@ -1165,20 +1261,12 @@ def get_holdings(id: str, is_subscribed: bool = False):
                         "direction": "Long",
                         "days_held": 12,
                         "weight": "25%",
-                        "entry_price": entry_price,
-                        "current_price": current_price,
-                        "pnl": pnl / (position.quantity * entry_price) if entry_price > 0 else 0
+                        "pnl": pnl
                     })
-
                     total_pnl += pnl
 
-        # Calculate average P&L for total
-        if holdings:
-            total_pnl_pct = total_pnl / len(holdings) if db_positions else (total_pnl / total_val * 100 if total_val > 0 else 0)
-        else:
-            total_pnl_pct = 0.0
+        total_pnl_pct = total_pnl / len(holdings) * 100 if holdings else 0
 
-        # Format response based on subscription status
         response_list = []
         for h in holdings:
             item = {
@@ -1186,7 +1274,7 @@ def get_holdings(id: str, is_subscribed: bool = False):
                 "direction": h.get("direction", "Long"),
                 "days_held": h.get("days_held", 0),
                 "weight": h.get("weight", "0%"),
-                "pnl_pct": h.get("pnl", 0) * 100  # Convert to percentage
+                "pnl_pct": h.get("pnl", 0) * 100
             }
 
             if is_subscribed:
@@ -1194,7 +1282,6 @@ def get_holdings(id: str, is_subscribed: bool = False):
                 item["name"] = h["name"]
                 item["current_price"] = h.get("current_price")
             else:
-                # Mask data for non-subscribers (PRD requirement)
                 item["symbol"] = "HIDDEN"
                 item["name"] = "HIDDEN"
                 item["current_price"] = None
@@ -1208,15 +1295,8 @@ def get_holdings(id: str, is_subscribed: bool = False):
         }
 
     except Exception as e:
-        logger.error(f"Error getting holdings: {e}")
-        import traceback
-        traceback.print_exc()
-
-        # Return empty holdings on error
-        return {
-            "holdings": [],
-            "total_pnl_pct": 0.0,
-            "position_count": 0
+        logger.error(f"Error in holdings fallback: {e}")
+        return {"holdings": [], "total_pnl_pct": 0, "position_count": 0}
         }
 
 

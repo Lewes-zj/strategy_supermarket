@@ -24,9 +24,20 @@ export const api = {
         return res.data;
     },
 
-    getTransactions: async (id: string, isSubscribed: boolean, year?: number): Promise<import('./types').Transaction[]> => {
+    getTransactions: async (
+        id: string,
+        isSubscribed: boolean,
+        year?: number,
+        page: number = 1,
+        pageSize: number = 50
+    ): Promise<import('./types').TransactionsResponse> => {
         const res = await axios.get(`${API_BASE}/strategies/${id}/transactions`, {
-            params: { is_subscribed: isSubscribed, ...(year ? { year } : {}) }
+            params: {
+                is_subscribed: isSubscribed,
+                ...(year ? { year } : {}),
+                page,
+                page_size: pageSize
+            }
         });
         return res.data;
     },

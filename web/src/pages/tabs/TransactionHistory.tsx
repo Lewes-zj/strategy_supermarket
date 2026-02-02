@@ -14,26 +14,38 @@ const TransactionHistory: React.FC = () => {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [signalData, setSignalData] = useState<SignalsResponse | null>(null);
     const [loading, setLoading] = useState(false);
+    const [total, setTotal] = useState(0);
+    const [page, setPage] = useState(1);
+    const [hasMore, setHasMore] = useState(true);
+
+    const fetchData = async (pageNum: number = 1, append: boolean = false) => {
+        if (id) {
+            setLoading(true);
+            try {
+                const [txResponse, signals] = await Promise.all([
+                    api.getTransactions(id, isSubscribed, selectedYear || undefined, pageNum),
+                    api.getSignals(id)
+                ]);
+
+                if (append) {
+                    setTransactions(prev => [...prev, ...txResponse.transactions]);
+                } else {
+                    setTransactions(txResponse.transactions);
+                }
+                setTotal(txResponse.total);
+                setHasMore(txResponse.transactions.length === 50);
+                setSignalData(signals);
+            } catch (e) {
+                console.error(e);
+            } finally {
+                setLoading(false);
+            }
+        }
+    };
 
     useEffect(() => {
-        const fetchData = async () => {
-            if (id) {
-                setLoading(true);
-                try {
-                    const [txData, signals] = await Promise.all([
-                        api.getTransactions(id, isSubscribed, selectedYear || undefined),
-                        api.getSignals(id)
-                    ]);
-                    setTransactions(txData);
-                    setSignalData(signals);
-                } catch (e) {
-                    console.error(e);
-                } finally {
-                    setLoading(false);
-                }
-            }
-        };
-        fetchData();
+        setPage(1);
+        fetchData(1, false);
     }, [id, isSubscribed, selectedYear]);
 
     // Format signal time for display
@@ -52,7 +64,7 @@ const TransactionHistory: React.FC = () => {
             {/* Toolbar */}
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px', color: 'var(--text-secondary)', fontSize: '12px' }}>
                 <div>
-                    {loading ? '加载中...' : `共 ${transactions.length} 条交易记录`}
+                    {loading ? '加载中...' : `共 ${total} 条交易记录`}
                 </div>
                 <div>Config ⚙️</div>
             </div>
@@ -162,6 +174,30 @@ const TransactionHistory: React.FC = () => {
                     </tbody>
                 </table>
             </div>
+
+            {/* Load More Button */}
+            {hasMore && transactions.length < total && (
+                <div style={{ textAlign: 'center', padding: '16px' }}>
+                    <button
+                        onClick={() => {
+                            const nextPage = page + 1;
+                            setPage(nextPage);
+                            fetchData(nextPage, true);
+                        }}
+                        disabled={loading}
+                        style={{
+                            padding: '8px 24px',
+                            background: 'var(--bg-card)',
+                            border: '1px solid var(--border-light)',
+                            borderRadius: '4px',
+                            color: 'var(--text-secondary)',
+                            cursor: loading ? 'not-allowed' : 'pointer'
+                        }}
+                    >
+                        {loading ? '加载中...' : `加载更多 (${transactions.length}/${total})`}
+                    </button>
+                </div>
+            )}
         </div>
     );
 };
