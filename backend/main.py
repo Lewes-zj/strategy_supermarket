@@ -355,6 +355,10 @@ def run_backtest(strategy_id: str, symbols: List[str] = None, use_real_data: boo
 
             session.commit()
             logger.info(f"Saved backtest cache for {strategy_id}")
+
+            # === 自动入库到结构化表 ===
+            _persist_backtest_to_structured_tables(session, strategy_id, result, equity_df)
+
     except Exception as e:
         logger.error(f"Failed to save backtest cache: {e}")
 
@@ -366,6 +370,77 @@ def run_backtest(strategy_id: str, symbols: List[str] = None, use_real_data: boo
     }
     STRATEGY_RESULTS[strategy_id] = result
     return result
+
+
+def _persist_backtest_to_structured_tables(session, strategy_id: str, result, equity_df):
+    """将回测结果持久化到结构化表（自动入库）"""
+    from database.models import StrategyTrade, StrategyDailySnapshot, StrategyDailyEquity
+    from sqlalchemy import and_
+
+    try:
+        # 获取行业映射
+        from database.repository import StockPoolRepository
+        stock_pool_repo = StockPoolRepository()
+        stock_pool = stock_pool_repo.get_stock_pool()
+        sector_map = {s['symbol']: s.get('sector', '其他') for s in stock_pool}
+
+        # 清空该策略的回测数据
+        session.query(StrategyTrade).filter(
+            and_(
+                StrategyTrade.strategy_id == strategy_id,
+                StrategyTrade.source == "backtest"
+            )
+        ).delete()
+        session.query(StrategyDailySnapshot).filter_by(strategy_id=strategy_id).delete()
+        session.query(StrategyDailyEquity).filter_by(strategy_id=strategy_id).delete()
+
+        # 保存交易记录
+        if hasattr(result, 'trades'):
+            for fill in result.trades:
+                symbol = fill.order.symbol
+                trade = StrategyTrade(
+                    strategy_id=strategy_id,
+                    trade_date=fill.timestamp.date(),
+                    trade_time=fill.timestamp.strftime("%H:%M:%S") if fill.timestamp else None,
+                    symbol=symbol,
+                    sector=sector_map.get(symbol, "其他"),
+                    side=fill.order.side.value,
+                    price=float(fill.fill_price),
+                    quantity=int(fill.fill_quantity),
+                    amount=float(fill.fill_price * fill.fill_quantity),
+                    commission=float(fill.commission),
+                    source="backtest"
+                )
+                session.add(trade)
+
+        # 保存每日权益
+        if not equity_df.empty:
+            initial_equity = float(equity_df["equity"].iloc[0])
+            for idx, row in equity_df.iterrows():
+                equity_date = idx.date() if hasattr(idx, 'date') else idx
+                total_equity = float(row["equity"])
+                daily_pnl_pct = float(row.get("returns", 0)) if "returns" in row and pd.notna(row["returns"]) else 0
+                total_pnl_pct = (total_equity - initial_equity) / initial_equity if initial_equity else 0
+
+                equity_record = StrategyDailyEquity(
+                    strategy_id=strategy_id,
+                    equity_date=equity_date,
+                    total_equity=total_equity,
+                    cash=total_equity * 0.1,
+                    position_value=total_equity * 0.9,
+                    daily_pnl_pct=daily_pnl_pct,
+                    total_pnl_pct=total_pnl_pct,
+                    position_count=0
+                )
+                session.add(equity_record)
+
+        session.commit()
+        logger.info(f"Persisted backtest to structured tables for {strategy_id}")
+
+    except Exception as e:
+        logger.error(f"Failed to persist to structured tables: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 def _calculate_metrics(returns: pd.Series):
