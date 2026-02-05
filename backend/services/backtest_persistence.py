@@ -48,25 +48,54 @@ class BacktestPersistenceService:
     def _save_trades(
         self,
         strategy_id: str,
-        trades: List[Fill],
+        trades: List,
         sector_map: Dict[str, str]
     ) -> None:
-        """保存交易记录"""
+        """保存交易记录
+
+        Handles both Fill objects (from fresh backtest) and dicts (from cache).
+        """
+        from datetime import datetime
+
         for fill in trades:
-            symbol = fill.order.symbol
-            trade = StrategyTrade(
-                strategy_id=strategy_id,
-                trade_date=fill.timestamp.date(),
-                trade_time=fill.timestamp.strftime("%H:%M:%S") if fill.timestamp else None,
-                symbol=symbol,
-                sector=sector_map.get(symbol, "其他"),
-                side=fill.order.side.value,
-                price=float(fill.fill_price),
-                quantity=int(fill.fill_quantity),
-                amount=float(fill.fill_price * fill.fill_quantity),
-                commission=float(fill.commission),
-                source="backtest"
-            )
+            # Handle both Fill objects and dict format (from cache)
+            if isinstance(fill, dict):
+                # Cached format: {"timestamp": "...", "symbol": "...", "side": "..."}
+                symbol = fill.get("symbol", "")
+                timestamp_str = fill.get("timestamp", "")
+                try:
+                    timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00")) if timestamp_str else None
+                except (ValueError, AttributeError):
+                    timestamp = None
+                trade = StrategyTrade(
+                    strategy_id=strategy_id,
+                    trade_date=timestamp.date() if timestamp else None,
+                    trade_time=timestamp.strftime("%H:%M:%S") if timestamp else None,
+                    symbol=symbol,
+                    sector=sector_map.get(symbol, "其他"),
+                    side=fill.get("side", "buy"),
+                    price=0.0,  # Not available in cached format
+                    quantity=0,  # Not available in cached format
+                    amount=0.0,  # Not available in cached format
+                    commission=0.0,  # Not available in cached format
+                    source="backtest"
+                )
+            else:
+                # Fill object format (from fresh backtest)
+                symbol = fill.order.symbol
+                trade = StrategyTrade(
+                    strategy_id=strategy_id,
+                    trade_date=fill.timestamp.date(),
+                    trade_time=fill.timestamp.strftime("%H:%M:%S") if fill.timestamp else None,
+                    symbol=symbol,
+                    sector=sector_map.get(symbol, "其他"),
+                    side=fill.order.side.value,
+                    price=float(fill.fill_price),
+                    quantity=int(fill.fill_quantity),
+                    amount=float(fill.fill_price * fill.fill_quantity),
+                    commission=float(fill.commission),
+                    source="backtest"
+                )
             self.db.add(trade)
 
     def _save_daily_data(

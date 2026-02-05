@@ -20,7 +20,7 @@ except ImportError:
     from engine.backtester import Backtester, SimpleExecutionModel
     NEW_ENGINE = False
 
-from engine.data_loader import generate_mock_data, fetch_stock_data
+from engine.data_loader import fetch_stock_data
 
 # Import new modular engine components
 try:
@@ -130,9 +130,15 @@ async def startup_event():
 
 # --- BACKTEST HELPERS ---
 
-def run_backtest(strategy_id: str, symbols: List[str] = None, use_real_data: bool = True):
+def run_backtest(strategy_id: str, symbols: List[str] = None, use_real_data: bool = True, backtest_days: int = None):
     """
     Run backtest for a strategy and cache results.
+
+    Args:
+        strategy_id: 策略ID
+        symbols: 股票代码列表
+        use_real_data: 是否使用真实数据
+        backtest_days: 回测天数，如果指定则覆盖策略默认值
 
     Note: Always uses real data from database. If no data is available,
     returns an empty result instead of using mock data.
@@ -154,15 +160,22 @@ def run_backtest(strategy_id: str, symbols: List[str] = None, use_real_data: boo
         symbols = strategy_info.default_symbols
 
     # Check cache in database
-    # Check if strategy has a max_backtest_days limit (e.g., dragon_leader)
-    max_backtest_days = strategy_info.parameters.get("max_backtest_days")
-    if max_backtest_days:
-        # Use strategy-specific backtest period
-        start_dt = (datetime.now() - timedelta(days=max_backtest_days)).date()
-        logger.info(f"Strategy {strategy_id} limited to {max_backtest_days} days backtest")
+    # Determine backtest days: command line arg > strategy config > default
+    if backtest_days:
+        # Use command line specified days
+        effective_days = backtest_days
+        logger.info(f"Strategy {strategy_id} using specified {effective_days} days backtest")
     else:
-        # Default: 10 years of data
-        start_dt = (datetime.now() - pd.Timedelta(days=365*10)).date()
+        # Check if strategy has a max_backtest_days limit (e.g., dragon_leader)
+        max_backtest_days = strategy_info.parameters.get("max_backtest_days")
+        if max_backtest_days:
+            effective_days = max_backtest_days
+            logger.info(f"Strategy {strategy_id} using config {effective_days} days backtest")
+        else:
+            # Default: 10 years of data
+            effective_days = 365 * 10
+
+    start_dt = (datetime.now() - timedelta(days=effective_days)).date()
     end_dt = datetime.now().date()
 
     with get_session() as session:
@@ -1372,7 +1385,6 @@ def _get_holdings_fallback(id: str, is_subscribed: bool):
     except Exception as e:
         logger.error(f"Error in holdings fallback: {e}")
         return {"holdings": [], "total_pnl_pct": 0, "position_count": 0}
-        }
 
 
 @app.get("/api/strategies/{id}/signals")

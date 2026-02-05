@@ -126,7 +126,7 @@ STRATEGY_REGISTRY: Dict[str, StrategyInfo] = {
             "stop_loss_pct": 0.05,
             "market_risk_threshold": 15,
             "cooldown_days": 7,
-            "max_backtest_days": 30  # 限制回测天数（涨停池API只支持30天）
+            "max_backtest_days": 60  # 回测天数（需要MA60计算，建议60天以上）
         }
     ),
 }

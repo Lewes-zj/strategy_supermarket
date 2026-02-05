@@ -126,6 +126,34 @@ class TushareService:
                     logger.error(f"{ts_code} 最终失败: {e}")
                     raise
         return None
+
+    def fetch_daily_by_date(self, trade_date: str) -> Optional[pd.DataFrame]:
+        """按交易日期拉取所有股票的日线数据（带重试）"""
+        for attempt in range(self.retry_times):
+            try:
+                self.rate_limiter.wait()
+                df = self.pro.daily(trade_date=trade_date)
+                return df
+            except Exception as e:
+                if attempt < self.retry_times - 1:
+                    delay = self.retry_delay * (2 ** attempt)
+                    logger.warning(f"trade_date={trade_date} 第{attempt+1}次失败: {e}, {delay}秒后重试")
+                    time.sleep(delay)
+                else:
+                    logger.error(f"trade_date={trade_date} 最终失败: {e}")
+                    raise
+        return None
+
+    def get_trade_dates(self, start_date: str, end_date: str) -> List[str]:
+        """获取指定日期范围内的交易日列表"""
+        self.rate_limiter.wait()
+        df = self.pro.trade_cal(
+            exchange='SSE',
+            start_date=start_date,
+            end_date=end_date,
+            is_open='1'
+        )
+        return df['cal_date'].tolist()
     
     def save_to_db(self, df: pd.DataFrame) -> int:
         """保存数据到数据库"""
@@ -279,8 +307,149 @@ class TushareService:
                 for code in self.progress_tracker.data['failed_symbols']:
                     f.write(f"{code}\n")
             print(f"\n失败股票已保存到: {failed_file}")
-        
+
         return stats
+
+    def fetch_batch_by_date(
+        self,
+        start_date: str,
+        end_date: str,
+        resume: bool = False,
+        force_new: bool = False
+    ) -> Dict:
+        """按交易日期批量拉取数据（每次拉取一个交易日的所有股票数据）"""
+        trade_dates = self.get_trade_dates(start_date, end_date)
+
+        progress = None
+        if resume and not force_new:
+            progress = self.progress_tracker.load()
+            if progress and not self.progress_tracker.is_expired():
+                completed = set(progress.get('completed_dates', []))
+                trade_dates = [d for d in trade_dates if d not in completed]
+                logger.info(f"从断点继续，剩余 {len(trade_dates)} 个交易日")
+
+        if not progress or force_new:
+            self.progress_tracker.data = {
+                'task_id': datetime.now().strftime('%Y%m%d_%H%M%S'),
+                'mode': 'by_date',
+                'start_date': start_date,
+                'end_date': end_date,
+                'total_dates': len(trade_dates),
+                'completed_dates': [],
+                'failed_dates': {},
+                'last_update': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+
+        stats = {'success': 0, 'failed': 0, 'skipped': 0, 'records': 0}
+        total = len(trade_dates)
+        start_time = time.time()
+
+        for i, trade_date in enumerate(trade_dates):
+            try:
+                df = self.fetch_daily_by_date(trade_date)
+
+                if df is not None and not df.empty:
+                    count = self.save_to_db(df)
+                    stats['records'] += count
+                    stats['success'] += 1
+                else:
+                    stats['skipped'] += 1
+
+                self.progress_tracker.data['completed_dates'].append(trade_date)
+
+            except Exception as e:
+                stats['failed'] += 1
+                self.progress_tracker.data['failed_dates'][trade_date] = {
+                    'error': str(e),
+                    'attempts': self.retry_times,
+                    'last_attempt': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                }
+
+            self.progress_tracker.data['last_update'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+            if (i + 1) % 5 == 0:
+                self.progress_tracker.save()
+
+                elapsed = time.time() - start_time
+                speed = (i + 1) / elapsed if elapsed > 0 else 0
+                remaining = (total - i - 1) / speed if speed > 0 else 0
+                pct = (i + 1) / total * 100
+
+                print(f"\r[{'=' * int(pct/5):20s}] {pct:.1f}% | {i+1}/{total} | {trade_date} | 剩余: {remaining/60:.1f}分钟", end='', flush=True)
+
+        print()
+
+        if stats['failed'] == 0:
+            self.progress_tracker.delete()
+        else:
+            self.progress_tracker.save()
+            failed_file = os.path.join(
+                os.path.dirname(os.path.dirname(__file__)),
+                "data",
+                f"failed_dates_{datetime.now().strftime('%Y%m%d')}.txt"
+            )
+            os.makedirs(os.path.dirname(failed_file), exist_ok=True)
+            with open(failed_file, 'w') as f:
+                for date in self.progress_tracker.data['failed_dates']:
+                    f.write(f"{date}\n")
+            print(f"\n失败日期已保存到: {failed_file}")
+
+        return stats
+
+    def fetch_stock_basic(self) -> Optional[pd.DataFrame]:
+        """获取所有A股股票基础信息"""
+        try:
+            self.rate_limiter.wait()
+            df = self.pro.stock_basic(
+                exchange='',
+                list_status='L',
+                fields='ts_code,symbol,name,area,industry,market,list_date,list_status'
+            )
+            return df
+        except Exception as e:
+            logger.error(f"获取股票基础信息失败: {e}")
+            return None
+
+    def save_stock_basic_to_db(self) -> int:
+        """拉取并保存股票基础信息到数据库"""
+        df = self.fetch_stock_basic()
+        if df is None or df.empty:
+            return 0
+
+        records = df.to_dict('records')
+        with get_session() as session:
+            for record in records:
+                list_date = record.get('list_date')
+                if list_date and pd.notna(list_date):
+                    list_date = datetime.strptime(str(list_date), '%Y%m%d').date()
+                else:
+                    list_date = None
+
+                data = {
+                    'ts_code': record['ts_code'],
+                    'symbol': record.get('symbol'),
+                    'name': record.get('name'),
+                    'area': record.get('area'),
+                    'industry': record.get('industry'),
+                    'market': record.get('market'),
+                    'list_date': list_date,
+                    'list_status': record.get('list_status'),
+                }
+
+                stmt = text("""
+                    INSERT INTO tushare_stock_basic
+                    (ts_code, symbol, name, area, industry, market, list_date, list_status)
+                    VALUES (:ts_code, :symbol, :name, :area, :industry, :market, :list_date, :list_status)
+                    ON DUPLICATE KEY UPDATE
+                    symbol=VALUES(symbol), name=VALUES(name), area=VALUES(area),
+                    industry=VALUES(industry), market=VALUES(market),
+                    list_date=VALUES(list_date), list_status=VALUES(list_status),
+                    updated_at=NOW()
+                """)
+                session.execute(stmt, data)
+
+        logger.info(f"保存了 {len(records)} 条股票基础信息")
+        return len(records)
 
 
 _tushare_service = None

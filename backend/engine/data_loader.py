@@ -1,74 +1,73 @@
-import akshare as ak
+"""
+数据加载器 - 从 Tushare 数据库表读取股票数据
+
+提供统一的数据访问接口，支持：
+- 单只股票日线数据查询
+- 多只股票批量查询
+- 股票池管理
+"""
 import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta, date
+from datetime import datetime, date
 from typing import List, Optional
 
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from services.data_service import get_data_service
-from database.repository import StockDataRepository
-
-# Global data service reference
-_data_service = None
+from database.connection import get_session
+from sqlalchemy import text
 
 
-def _get_data_service():
-    """Lazy initialization of data service."""
-    global _data_service
-    if _data_service is None:
-        _data_service = get_data_service()
-    return _data_service
-
-
-def fetch_stock_data(symbol: str, start_date: str, end_date: str, adjust: str = "qfq") -> pd.DataFrame:
+def fetch_stock_data(
+    symbol: str,
+    start_date: str,
+    end_date: str,
+    adjust: str = "qfq"
+) -> pd.DataFrame:
     """
-    Fetch A-share stock data using AkShare with rate limiting and caching.
-    symbol: e.g. "000001"
-    start_date: "YYYYMMDD"
-    end_date: "YYYYMMDD"
-    adjust: "qfq" (forward), "hfq" (backward), or "" (none)
+    从数据库获取单只股票的日线数据
+
+    Args:
+        symbol: 股票代码，支持两种格式：
+                - tushare格式: "000001.SZ"
+                - 纯代码格式: "000001"
+        start_date: 开始日期 "YYYYMMDD"
+        end_date: 结束日期 "YYYYMMDD"
+        adjust: 复权类型（当前数据库存储的是不复权数据）
+
+    Returns:
+        DataFrame with columns: date, open, high, low, close, volume, symbol
     """
-    try:
-        data_service = _get_data_service()
+    ts_code = _normalize_ts_code(symbol)
 
-        # Try to get from cache first
-        start_dt = datetime.strptime(start_date, "%Y%m%d").date()
-        end_dt = datetime.strptime(end_date, "%Y%m%d").date() if end_date else datetime.now().date()
+    start_dt = datetime.strptime(start_date, "%Y%m%d").date()
+    end_dt = datetime.strptime(end_date, "%Y%m%d").date()
 
-        # Get cached data
-        df = data_service.get_cached_data([symbol], start_dt, end_dt)
+    with get_session() as session:
+        result = session.execute(
+            text("""
+                SELECT trade_date, open, high, low, close, vol as volume,
+                       amount, pre_close, change_amt, pct_chg, ts_code
+                FROM tushare_stock_daily
+                WHERE ts_code = :ts_code
+                AND trade_date BETWEEN :start_date AND :end_date
+                ORDER BY trade_date
+            """),
+            {'ts_code': ts_code, 'start_date': start_dt, 'end_date': end_dt}
+        )
+        rows = result.fetchall()
 
-        if df.empty:
-            # Fallback to direct AkShare fetch with rate limiting
-            df = _fetch_from_akshare(symbol, start_date, end_date, adjust)
-
-        return df
-
-    except Exception as e:
-        print(f"Error fetching data for {symbol}: {e}")
+    if not rows:
         return pd.DataFrame()
 
+    df = pd.DataFrame(rows, columns=[
+        'date', 'open', 'high', 'low', 'close', 'volume',
+        'amount', 'pre_close', 'change_amt', 'pct_chg', 'symbol'
+    ])
+    df['date'] = pd.to_datetime(df['date'])
+    df.set_index('date', inplace=True)
 
-def _fetch_from_akshare(symbol: str, start_date: str, end_date: str, adjust: str = "qfq") -> pd.DataFrame:
-    """Direct fetch from AkShare with rate limiting."""
-    try:
-        data_service = _get_data_service()
-        df = data_service.fetch_stock_data(symbol, start_date, end_date, adjust)
-
-        if df is not None and not df.empty:
-            # Save to database
-            StockDataRepository.save_stock_data(symbol, df)
-            df['symbol'] = symbol
-            return df.set_index('date') if 'date' in df.columns else df
-
-        return pd.DataFrame()
-
-    except Exception as e:
-        print(f"Error in direct AkShare fetch for {symbol}: {e}")
-        return pd.DataFrame()
+    return df
 
 
 def fetch_multiple_symbols(
@@ -78,148 +77,129 @@ def fetch_multiple_symbols(
     adjust: str = "qfq"
 ) -> pd.DataFrame:
     """
-    Fetch data for multiple symbols efficiently.
+    批量获取多只股票的日线数据
 
     Args:
-        symbols: List of stock symbols
-        start_date: Start date "YYYYMMDD"
-        end_date: End date "YYYYMMDD"
-        adjust: Adjustment type
+        symbols: 股票代码列表
+        start_date: 开始日期 "YYYYMMDD"
+        end_date: 结束日期 "YYYYMMDD"
+        adjust: 复权类型
 
     Returns:
-        DataFrame with multi-index or symbol column
+        DataFrame with symbol column
     """
     if end_date is None:
         end_date = datetime.now().strftime("%Y%m%d")
 
+    ts_codes = [_normalize_ts_code(s) for s in symbols]
     start_dt = datetime.strptime(start_date, "%Y%m%d").date()
     end_dt = datetime.strptime(end_date, "%Y%m%d").date()
 
-    data_service = _get_data_service()
+    with get_session() as session:
+        placeholders = ','.join([f':code_{i}' for i in range(len(ts_codes))])
+        params = {f'code_{i}': code for i, code in enumerate(ts_codes)}
+        params['start_date'] = start_dt
+        params['end_date'] = end_dt
 
-    # Get from cache first
-    df = data_service.get_cached_data(symbols, start_dt, end_dt)
+        result = session.execute(
+            text(f"""
+                SELECT trade_date, open, high, low, close, vol as volume,
+                       amount, pre_close, change_amt, pct_chg, ts_code
+                FROM tushare_stock_daily
+                WHERE ts_code IN ({placeholders})
+                AND trade_date BETWEEN :start_date AND :end_date
+                ORDER BY ts_code, trade_date
+            """),
+            params
+        )
+        rows = result.fetchall()
 
-    if df.empty:
-        # Fetch all symbols
-        all_data = []
-        for symbol in symbols:
-            symbol_df = fetch_stock_data(symbol, start_date, end_date, adjust)
-            if not symbol_df.empty:
-                all_data.append(symbol_df)
+    if not rows:
+        return pd.DataFrame()
 
-        if all_data:
-            df = pd.concat(all_data)
+    df = pd.DataFrame(rows, columns=[
+        'date', 'open', 'high', 'low', 'close', 'volume',
+        'amount', 'pre_close', 'change_amt', 'pct_chg', 'symbol'
+    ])
+    df['date'] = pd.to_datetime(df['date'])
 
     return df
 
 
 def get_stock_pool() -> List[str]:
-    """Get the active stock pool symbols."""
-    try:
-        data_service = _get_data_service()
-        return data_service.stock_pool_repo.get_active_symbols("CSI300")
-    except Exception as e:
-        print(f"Error getting stock pool: {e}")
-        return []
+    """获取活跃股票池（从数据库中有数据的股票）"""
+    with get_session() as session:
+        result = session.execute(
+            text("SELECT DISTINCT ts_code FROM tushare_stock_daily ORDER BY ts_code")
+        )
+        return [row[0] for row in result.fetchall()]
 
 
 def get_stock_pool_details() -> List[dict]:
-    """Get detailed stock pool information."""
-    try:
-        data_service = _get_data_service()
-        return data_service.stock_pool_repo.get_stock_pool()
-    except Exception as e:
-        print(f"Error getting stock pool details: {e}")
-        return []
+    """获取股票池详细信息"""
+    with get_session() as session:
+        result = session.execute(
+            text("""
+                SELECT ts_code, symbol, name, industry, market, list_date
+                FROM tushare_stock_basic
+                WHERE list_status = 'L'
+                ORDER BY ts_code
+            """)
+        )
+        rows = result.fetchall()
+
+    return [
+        {
+            'ts_code': row[0],
+            'symbol': row[1],
+            'name': row[2],
+            'industry': row[3],
+            'market': row[4],
+            'list_date': row[5]
+        }
+        for row in rows
+    ]
 
 
-def generate_mock_data(start_date: str = "20230101", days: int = 750, symbol: str = "MOCK01") -> pd.DataFrame:
+def get_trading_days(start_date: date, end_date: date) -> List[date]:
     """
-    Generate realistic-looking random stock data.
+    从数据库获取交易日历
 
     Args:
-        start_date: Start date in YYYYMMDD format (default: 20230101)
-        days: Number of days to generate (default: 750 = ~3 years)
-        symbol: Stock symbol
-    """
-    dates = pd.date_range(start=start_date, periods=days, freq="B")
-
-    # Use symbol as seed for reproducibility per symbol
-    seed = hash(symbol) % (2**31)
-    np.random.seed(seed)
-
-    # Geometric Brownian Motion
-    dt = 1/252
-    mu = 0.08  # 8% annual drift (more realistic)
-    sigma = 0.25  # 25% annual volatility
-
-    current_price = 100.0
-    data = []
-
-    # Pre-generate all random shocks for speed
-    n = len(dates)
-    shocks = np.random.normal(0, np.sqrt(dt), n)
-    high_shocks = np.random.normal(0, 0.5, n)
-    low_shocks = np.random.normal(0, 0.5, n)
-    open_shocks = np.random.normal(0, 0.25, n)
-
-    for i, date in enumerate(dates):
-        # Simple GBM step
-        shock = shocks[i]
-        change = current_price * (mu * dt + sigma * shock)
-        close_price = current_price + change
-
-        # Generate OHLC
-        daily_vol = current_price * sigma * np.sqrt(dt)
-        high_price = close_price + abs(daily_vol * high_shocks[i] / 2)
-        low_price = close_price - abs(daily_vol * low_shocks[i] / 2)
-        open_price = (high_price + low_price) / 2 + daily_vol * open_shocks[i] / 4
-
-        # Ensure logic
-        high_price = max(high_price, open_price, close_price)
-        low_price = min(low_price, open_price, close_price)
-
-        volume = int(np.random.normal(1000000, 200000))
-
-        data.append({
-            "date": date,
-            "open": round(open_price, 2),
-            "high": round(high_price, 2),
-            "low": round(low_price, 2),
-            "close": round(close_price, 2),
-            "volume": volume,
-            "symbol": symbol
-        })
-        current_price = close_price
-
-    df = pd.DataFrame(data)
-    df.set_index("date", inplace=True)
-    return df
-
-
-def init_stock_database() -> bool:
-    """
-    Initialize the stock database with CSI 300 stock pool and historical data.
+        start_date: 开始日期
+        end_date: 结束日期
 
     Returns:
-        True if successful
+        交易日列表（升序）
     """
-    try:
-        data_service = _get_data_service()
+    with get_session() as session:
+        result = session.execute(
+            text("""
+                SELECT DISTINCT trade_date
+                FROM tushare_stock_daily
+                WHERE trade_date BETWEEN :start_date AND :end_date
+                ORDER BY trade_date
+            """),
+            {'start_date': start_date, 'end_date': end_date}
+        )
+        return [row[0] for row in result.fetchall()]
 
-        # Initialize stock pool
-        print("Initializing CSI 300 stock pool...")
-        count = data_service.init_stock_pool()
-        print(f"Added {count} symbols to stock pool")
 
-        # Update historical data (last 2 years)
-        print("Updating historical data...")
-        stats = data_service.update_stock_data(days_back=365*2)
-        print(f"Update complete: {stats}")
+def _normalize_ts_code(symbol: str) -> str:
+    """
+    标准化股票代码为 tushare 格式
 
-        return True
+    Args:
+        symbol: 输入代码，如 "000001" 或 "000001.SZ"
 
-    except Exception as e:
-        print(f"Error initializing stock database: {e}")
-        return False
+    Returns:
+        tushare格式代码，如 "000001.SZ"
+    """
+    if '.' in symbol:
+        return symbol.upper()
+
+    # 根据代码前缀判断交易所
+    if symbol.startswith(('6', '9')):
+        return f"{symbol}.SH"
+    else:
+        return f"{symbol}.SZ"

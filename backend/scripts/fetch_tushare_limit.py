@@ -1,19 +1,15 @@
 #!/usr/bin/env python
 """
-从Tushare拉取A股历史日线数据
+从Tushare拉取A股每日涨跌停价格数据
 
 用法:
-    # 按股票代码拉取（默认模式）
-    python scripts/fetch_tushare_daily.py --start 20200101 --end 20241231
-    python scripts/fetch_tushare_daily.py --start 20200101 --incremental
-    python scripts/fetch_tushare_daily.py --symbols 000001.SZ,600000.SH --start 20200101
-    python scripts/fetch_tushare_daily.py --symbols-file stocks.txt --start 20200101
-    python scripts/fetch_tushare_daily.py --resume
-    python scripts/fetch_tushare_daily.py --retry-failed
-
-    # 按交易日期拉取（每次拉取一个交易日的所有股票数据）
-    python scripts/fetch_tushare_daily.py --by-date --trade-date-start 20240101 --trade-date-end 20240131
-    python scripts/fetch_tushare_daily.py --by-date --trade-date-start 20240101
+    python scripts/fetch_tushare_limit.py --start 20200101 --end 20241231
+    python scripts/fetch_tushare_limit.py --start 20200101 --incremental
+    python scripts/fetch_tushare_limit.py --symbols 000001.SZ,600000.SH --start 20200101
+    python scripts/fetch_tushare_limit.py --symbols-file stocks.txt --start 20200101
+    python scripts/fetch_tushare_limit.py --resume
+    python scripts/fetch_tushare_limit.py --retry-failed
+    python scripts/fetch_tushare_limit.py --by-date --start 20200101 --end 20241231
 """
 import os
 import sys
@@ -22,13 +18,12 @@ from datetime import datetime
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from services.tushare_service import get_tushare_service, ProgressTracker
+from services.tushare_limit_service import get_tushare_limit_service, LimitProgressTracker
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='从Tushare拉取A股历史日线数据')
+    parser = argparse.ArgumentParser(description='从Tushare拉取A股每日涨跌停价格数据')
 
-    # 按股票代码拉取的参数
     parser.add_argument('--start', type=str, help='开始日期 (YYYYMMDD)')
     parser.add_argument('--end', type=str, default=datetime.now().strftime('%Y%m%d'),
                         help='结束日期 (YYYYMMDD), 默认今天')
@@ -38,14 +33,7 @@ def parse_args():
     parser.add_argument('--resume', action='store_true', help='继续上次未完成的任务')
     parser.add_argument('--force-new', action='store_true', help='强制重新开始')
     parser.add_argument('--retry-failed', action='store_true', help='重新拉取上次失败的股票')
-
-    # 按交易日期拉取的参数
-    parser.add_argument('--by-date', action='store_true',
-                        help='按交易日期拉取模式（每次拉取一个交易日的所有股票数据）')
-    parser.add_argument('--trade-date-start', type=str, help='交易日期范围开始 (YYYYMMDD)')
-    parser.add_argument('--trade-date-end', type=str,
-                        default=datetime.now().strftime('%Y%m%d'),
-                        help='交易日期范围结束 (YYYYMMDD), 默认今天')
+    parser.add_argument('--by-date', action='store_true', help='按交易日期拉取模式，逐日拉取所有股票数据')
 
     return parser.parse_args()
 
@@ -54,19 +42,19 @@ def get_symbols(args, service) -> list:
     """获取要拉取的股票列表"""
     if args.symbols:
         return args.symbols.split(',')
-    
+
     if args.symbols_file:
         with open(args.symbols_file, 'r') as f:
             return [line.strip() for line in f if line.strip()]
-    
+
     if args.retry_failed:
-        tracker = ProgressTracker()
+        tracker = LimitProgressTracker()
         progress = tracker.load()
         if progress and progress.get('failed_symbols'):
             return list(progress['failed_symbols'].keys())
         print("没有找到失败的股票记录")
         sys.exit(1)
-    
+
     print("正在获取A股股票列表...")
     return service.get_all_stocks()
 
@@ -74,59 +62,59 @@ def get_symbols(args, service) -> list:
 def main():
     args = parse_args()
 
-    # 按交易日期拉取模式
+    # 按日期拉取模式
     if args.by_date:
-        if not args.trade_date_start:
-            print("错误: --by-date 模式必须指定 --trade-date-start 参数")
+        if not args.start:
+            print("错误: --by-date 模式必须指定 --start 参数")
             sys.exit(1)
 
         try:
-            service = get_tushare_service()
+            service = get_tushare_limit_service()
         except ValueError as e:
             print(f"错误: {e}")
             print("请在 .env 文件中配置 TUSHARE_TOKEN")
             sys.exit(1)
 
-        print(f"按交易日期拉取模式")
-        print(f"日期范围: {args.trade_date_start} - {args.trade_date_end}")
+        print(f"按日期拉取模式")
+        print(f"时间范围: {args.start} - {args.end}")
         print("-" * 60)
 
-        stats = service.fetch_batch_by_date(
-            start_date=args.trade_date_start,
-            end_date=args.trade_date_end,
-            resume=args.resume,
-            force_new=args.force_new
+        stats = service.fetch_by_trade_dates(
+            start_date=args.start,
+            end_date=args.end
         )
 
         print("\n" + "=" * 60)
         print("拉取完成!")
-        print(f"  - 成功: {stats['success']} 个交易日")
-        print(f"  - 失败: {stats['failed']} 个交易日")
-        print(f"  - 跳过: {stats['skipped']} 个交易日")
+        print(f"  - 成功天数: {stats['success']} 天")
+        print(f"  - 失败天数: {stats['failed']} 天")
         print(f"  - 记录数: {stats['records']} 条")
         print("=" * 60)
+
+        if stats['failed'] > 0:
+            print(f"\n失败日期: {', '.join(stats['failed_dates'])}")
         return
 
-    # 按股票代码拉取模式（原有逻辑）
+    # 原有的按股票拉取模式
     if not args.resume and not args.retry_failed and not args.start:
         print("错误: 必须指定 --start 参数或使用 --resume/--retry-failed")
         sys.exit(1)
-    
+
     try:
-        service = get_tushare_service()
+        service = get_tushare_limit_service()
     except ValueError as e:
         print(f"错误: {e}")
         print("请在 .env 文件中配置 TUSHARE_TOKEN")
         sys.exit(1)
-    
+
     if not args.force_new and not args.resume and not args.retry_failed:
-        tracker = ProgressTracker()
+        tracker = LimitProgressTracker()
         progress = tracker.load()
         if progress and not tracker.is_expired():
             completed = len(progress.get('completed_symbols', []))
             total = progress.get('total_symbols', 0)
             last_update = progress.get('last_update', '')
-            
+
             print(f"\n检测到未完成的任务 ({last_update}):")
             print(f"  - 已完成: {completed}/{total} ({completed/total*100:.1f}%)" if total > 0 else "  - 已完成: 0")
             print(f"  - 时间范围: {progress.get('start_date')} - {progress.get('end_date')}")
@@ -134,7 +122,7 @@ def main():
             print("  [1] 继续上次任务 (--resume)")
             print("  [2] 放弃并重新开始 (--force-new)")
             print("  [3] 退出")
-            
+
             choice = input("\n> ").strip()
             if choice == '1':
                 args.resume = True
@@ -145,24 +133,24 @@ def main():
             else:
                 print("已退出")
                 sys.exit(0)
-    
+
     symbols = get_symbols(args, service)
     print(f"共 {len(symbols)} 只股票待处理")
-    
+
     start_date = args.start
     end_date = args.end
-    
+
     if args.resume:
-        tracker = ProgressTracker()
+        tracker = LimitProgressTracker()
         progress = tracker.load()
         if progress:
             start_date = progress.get('start_date', start_date)
             end_date = progress.get('end_date', end_date)
-    
+
     print(f"时间范围: {start_date} - {end_date}")
     print(f"模式: {'增量更新' if args.incremental else '全量拉取'}")
     print("-" * 60)
-    
+
     stats = service.fetch_batch(
         symbols=symbols,
         start_date=start_date,
@@ -171,7 +159,7 @@ def main():
         resume=args.resume,
         force_new=args.force_new
     )
-    
+
     print("\n" + "=" * 60)
     print("拉取完成!")
     print(f"  - 成功: {stats['success']} 只")
@@ -179,10 +167,10 @@ def main():
     print(f"  - 跳过: {stats['skipped']} 只")
     print(f"  - 记录数: {stats['records']} 条")
     print("=" * 60)
-    
+
     if stats['failed'] > 0:
         print(f"\n重新拉取失败股票命令:")
-        print(f"  python scripts/fetch_tushare_daily.py --retry-failed --start {start_date}")
+        print(f"  python scripts/fetch_tushare_limit.py --retry-failed --start {start_date}")
 
 
 if __name__ == '__main__':
